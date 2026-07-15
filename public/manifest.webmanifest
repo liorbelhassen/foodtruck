@@ -1,0 +1,20 @@
+{
+  "name": "הבשוניה - Foodtruck",
+  "short_name": "הבשוניה",
+  "description": "הזמנת אוכל מהפודטראק",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
