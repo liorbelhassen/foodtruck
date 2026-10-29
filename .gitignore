@@ -30,3 +30,11 @@ functions/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Test artifacts
+playwright-report
+test-results
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
