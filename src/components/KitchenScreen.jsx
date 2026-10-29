@@ -6,6 +6,7 @@ import {
 } from "./uiHelpers.jsx";
 import {
   formatDurationMs,
+  getIncludedToppings,
   screenCardStyle,
 } from "./uiHelpersUtils.jsx";
 import { DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
@@ -442,9 +443,9 @@ export default function KitchenScreen({
                       {i.drinkKey && drinkLabelMap[i.drinkKey] && (
                         <span style={{ color: "#2563eb", fontSize: 11, marginRight: 4 }}>🥤 {drinkLabelMap[i.drinkKey]}</span>
                       )}
-                      {i.allowsToppings && i.mods && i.mods.some(m => m.included) && (
+                      {getIncludedToppings(i).length > 0 && (
                         <span style={{ color: "#059669", fontSize: 11, marginRight: 4 }}>
-                          +{i.mods.filter(m => m.included).map(m => m.name).join(", ")}
+                          +{getIncludedToppings(i).join(", ")}
                         </span>
                       )}
                     </div>
@@ -550,9 +551,9 @@ export default function KitchenScreen({
                         {i.drinkKey && drinkLabelMap[i.drinkKey] && (
                           <span style={{ color: "#2563eb", fontSize: 11, marginRight: 4 }}>🥤 {drinkLabelMap[i.drinkKey]}</span>
                         )}
-                        {i.allowsToppings && i.mods && i.mods.some(m => m.included) && (
+                        {getIncludedToppings(i).length > 0 && (
                           <span style={{ color: "#059669", fontSize: 11, marginRight: 4 }}>
-                            +{i.mods.filter(m => m.included).map(m => m.name).join(", ")}
+                            +{getIncludedToppings(i).join(", ")}
                           </span>
                         )}
                       </div>
