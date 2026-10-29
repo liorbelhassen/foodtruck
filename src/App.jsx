@@ -14,6 +14,7 @@ import {
   logout,
   subscribeToAuth,
 } from "./services/auth";
+import { logSiteVisit } from "./services/siteVisits";
 
 import { doc, serverTimestamp as firestoreServerTimestamp, updateDoc } from "firebase/firestore";
 import {
@@ -144,6 +145,14 @@ export default function App() {
     }
   }, [authReady, user]);
 
+  const loggedVisitUidRef = useRef(null);
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (loggedVisitUidRef.current === user.uid) return;
+    loggedVisitUidRef.current = user.uid;
+    logSiteVisit(user.uid, !!user.isAnonymous).catch(console.error);
+  }, [user?.uid, user?.isAnonymous]);
+
   useEffect(() => {
     const unsubscribe = subscribeToOrders((orders) => {
       setFirebaseOrders(orders);
@@ -229,7 +238,14 @@ export default function App() {
     return () => unsubscribe();
   }, [isAdmin]);
 
-  const sendOrder = async ({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone } = {}) => {
+  const sendOrder = async ({
+    requestedPayment,
+    deliveryTime,
+    deliveryAddress,
+    deliveryCity,
+    deliveryPhone,
+    pickupTime,
+  } = {}) => {
     const total = cart.reduce((sum, item) => sum + item.price, 0);
 
     const createdOrderRef = await createOrder({
@@ -240,6 +256,7 @@ export default function App() {
       deliveryAddress: deliveryAddress || null,
       deliveryCity: deliveryCity || null,
       deliveryPhone: deliveryPhone || null,
+      pickupTime: pickupTime || null,
       total,
       items: cart,
     });

@@ -176,6 +176,13 @@ export default function CashierScreen({
                       )}
                     </div>
                   )}
+                  {!order.deliveryTime && order.pickupTime && (
+                    <div style={{ marginTop: "8px", background: "#dcfce7", border: "2px solid #16a34a", borderRadius: "10px", padding: "8px 12px" }}>
+                      <div style={{ color: "#166534", fontWeight: 900, fontSize: "15px" }}>
+                        🏪 איסוף עצמי ב-{order.pickupTime}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div style={statusPill(order.status)}>
                   {cashierStatusLabel(order.status)}

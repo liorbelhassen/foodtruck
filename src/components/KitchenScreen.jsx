@@ -457,6 +457,10 @@ export default function KitchenScreen({
                       <div style={{ color: "#92400e", fontWeight: 900 }}>🛵 {order.deliveryTime}</div>
                       {order.deliveryCity && <div style={{ color: "#78350f", fontWeight: 700 }}>{order.deliveryCity}</div>}
                     </div>
+                  ) : order.pickupTime ? (
+                    <div style={{ background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
+                      <div style={{ color: "#166534", fontWeight: 900 }}>🏪 {order.pickupTime}</div>
+                    </div>
                   ) : (
                     <span style={{ color: "#9ca3af", fontSize: 12 }}>איסוף</span>
                   )}
@@ -564,6 +568,10 @@ export default function KitchenScreen({
                       <div style={{ fontSize: 12 }}>
                         <div style={{ color: "#92400e", fontWeight: 900 }}>🛵 {order.deliveryTime}</div>
                         {order.deliveryCity && <div style={{ color: "#78350f", fontWeight: 700 }}>{order.deliveryCity}</div>}
+                      </div>
+                    ) : order.pickupTime ? (
+                      <div style={{ fontSize: 12 }}>
+                        <div style={{ color: "#166534", fontWeight: 900 }}>🏪 {order.pickupTime}</div>
                       </div>
                     ) : (
                       <span style={{ color: "#9ca3af", fontSize: 12 }}>איסוף</span>
