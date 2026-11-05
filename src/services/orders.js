@@ -96,6 +96,7 @@ export async function createOrder(order) {
       deliveryAddress: order.deliveryAddress || null,
       deliveryCity: order.deliveryCity || null,
       deliveryPhone: order.deliveryPhone || null,
+      pickupTime: order.pickupTime || null,
       deliveryFee: order.deliveryFee || null,
     });
   });

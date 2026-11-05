@@ -36,6 +36,11 @@ import {
   replaceDrinkInName,
 } from "./customer/customerHelpers.js";
 import { DrinkChip, PaymentChoiceButton, QtyButton, ToppingChip } from "./customer/customerAtoms.jsx";
+import { TimeWheelPicker } from "./customer/TimeWheelPicker.jsx";
+
+const PICKUP_TIME_MIN = "18:30";
+const PICKUP_TIME_MAX = "23:00";
+const DEFAULT_PICKUP_TIME = PICKUP_TIME_MIN;
 
 const REVIEW_DISMISS_STORAGE_KEY = "ft_dismissed_review_order_id";
 
@@ -879,6 +884,7 @@ export default function CustomerScreen({
   const [orderType, setOrderType] = useState("pickup");
   const [certLightbox, setCertLightbox] = useState(null);
   const [deliveryTime, setDeliveryTime] = useState(null);
+  const [pickupTime, setPickupTime] = useState(DEFAULT_PICKUP_TIME);
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
@@ -1636,7 +1642,15 @@ export default function CustomerScreen({
       ) {
         Notification.requestPermission().catch(() => {});
       }
-      await onSendOrder({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone, deliveryFee });
+      await onSendOrder({
+        requestedPayment,
+        deliveryTime,
+        deliveryAddress,
+        deliveryCity,
+        deliveryPhone,
+        pickupTime: orderType === "pickup" ? pickupTime || DEFAULT_PICKUP_TIME : null,
+        deliveryFee,
+      });
       setShowConfirm(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
@@ -2312,6 +2326,9 @@ export default function CustomerScreen({
                             setDeliveryAddress("");
                             setDeliveryCity("");
                             setDeliveryPhone("");
+                            setPickupTime((prev) => prev || DEFAULT_PICKUP_TIME);
+                          } else {
+                            setPickupTime(null);
                           }
                         }}
                         style={{
@@ -2334,6 +2351,22 @@ export default function CustomerScreen({
                       </button>
                     ))}
                   </div>
+
+                  {/* שעת איסוף — מוצג רק כשנבחר איסוף עצמי */}
+                  {orderType === "pickup" && (
+                    <div style={{ padding: "14px 16px", background: "#f0fdf4", textAlign: "center" }}>
+                      <div style={{ fontWeight: 800, color: THEME.accentDeep, fontSize: 14, marginBottom: 10 }}>
+                        באיזו שעה תרצה לאסוף? ({PICKUP_TIME_MIN}–{PICKUP_TIME_MAX})
+                      </div>
+                      <TimeWheelPicker
+                        value={pickupTime || DEFAULT_PICKUP_TIME}
+                        onChange={setPickupTime}
+                        minTime={PICKUP_TIME_MIN}
+                        maxTime={PICKUP_TIME_MAX}
+                        stepMinutes={15}
+                      />
+                    </div>
+                  )}
 
                   {/* פרטי משלוח — מוצג רק כשנבחר משלוח */}
                   {orderType === "delivery" && (
