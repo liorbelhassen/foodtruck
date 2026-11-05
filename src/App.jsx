@@ -111,6 +111,9 @@ export default function App() {
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
   const [connectedCustomersCount, setConnectedCustomersCount] = useState(0);
+  const [connectedCustomers, setConnectedCustomers] = useState([]);
+  const [showConnectedCustomers, setShowConnectedCustomers] = useState(false);
+  const presenceNameRef = useRef(null);
   const presenceSessionIdRef = useRef(
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -202,6 +205,7 @@ export default function App() {
         uid: user.uid,
         screen: "customer",
         isAdmin: false,
+        name: presenceNameRef.current,
         lastSeen: Date.now(),
         connectedAt: rtdbServerTimestamp(),
       }).catch(() => {});
@@ -220,6 +224,13 @@ export default function App() {
   }, [shouldTrackCustomerPresence, user?.uid]);
 
   useEffect(() => {
+    const name = customerConfirmed ? (customerName || "").trim() || null : null;
+    presenceNameRef.current = name;
+    if (!shouldTrackCustomerPresence || !user?.uid) return;
+    update(ref(rtdb, `activeCustomers/${user.uid}-${presenceSessionIdRef.current}`), { name }).catch(() => {});
+  }, [shouldTrackCustomerPresence, user?.uid, customerConfirmed, customerName]);
+
+  useEffect(() => {
     if (!isAdmin) {
       return undefined;
     }
@@ -228,7 +239,7 @@ export default function App() {
     const STALE_AFTER_MS = 70000;
     const unsubscribe = onValue(activeCustomersRef, (snapshot) => {
       const now = Date.now();
-      let nextCount = 0;
+      const nextList = [];
 
       snapshot.forEach((child) => {
         const value = child.val() || {};
@@ -241,10 +252,16 @@ export default function App() {
         if (value.screen !== "customer") return;
         if (lastSeen == null) return;
         if (now - lastSeen > STALE_AFTER_MS) return;
-        nextCount += 1;
+        nextList.push({
+          id: child.key,
+          name: typeof value.name === "string" && value.name.trim() ? value.name.trim() : null,
+          connectedAt: typeof value.connectedAt === "number" ? value.connectedAt : null,
+        });
       });
 
-      setConnectedCustomersCount(nextCount);
+      nextList.sort((a, b) => (a.connectedAt || 0) - (b.connectedAt || 0));
+      setConnectedCustomers(nextList);
+      setConnectedCustomersCount(nextList.length);
     });
 
     return () => unsubscribe();
@@ -503,8 +520,12 @@ export default function App() {
         )}
 
         {isAdmin && (
-          <div
+          <button
+            type="button"
+            onClick={() => setShowConnectedCustomers(true)}
             style={{
+              cursor: "pointer",
+              fontFamily: "inherit",
               marginInlineStart: "auto",
               padding: isDesktop ? "8px 12px" : "9px 14px",
               borderRadius: "999px",
@@ -517,10 +538,100 @@ export default function App() {
               whiteSpace: "nowrap",
             }}
           >
-            כמה אנשים מחוברים ברגע זה: {connectedCustomersCount}
-          </div>
+            כמה אנשים מחוברים ברגע זה: {connectedCustomersCount} ▾
+          </button>
         )}
       </div>
+
+      {isAdmin &&
+        showConnectedCustomers &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            onClick={() => setShowConnectedCustomers(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15,23,42,0.52)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 30,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 380,
+                maxHeight: "80vh",
+                overflowY: "auto",
+                background: "white",
+                borderRadius: 20,
+                border: "1px solid #dbeafe",
+                boxShadow: "0 24px 70px rgba(15,23,42,0.24)",
+                padding: 18,
+                display: "grid",
+                gap: 10,
+                direction: "rtl",
+                textAlign: "right",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 17 }}>
+                מחוברים ברגע זה ({connectedCustomers.length})
+              </div>
+              {connectedCustomers.length === 0 && (
+                <div style={{ color: "#64748b", fontSize: 14 }}>אין כרגע לקוחות מחוברים</div>
+              )}
+              {connectedCustomers.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    padding: "8px 12px",
+                    borderRadius: 12,
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    fontSize: 14,
+                  }}
+                >
+                  <span style={{ fontWeight: 800, color: c.name ? "#0f172a" : "#64748b" }}>
+                    {c.name || "לקוח (עוד לא הזין שם)"}
+                  </span>
+                  {c.connectedAt && (
+                    <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>
+                      מחובר מ-
+                      {new Date(c.connectedAt).toLocaleTimeString("he-IL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZone: "Asia/Jerusalem",
+                      })}
+                    </span>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowConnectedCustomers(false)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #cbd5e1",
+                  background: "white",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                סגור
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {showAdminEmailLogin &&
         typeof document !== "undefined" &&
