@@ -130,12 +130,18 @@ function normalizeDrinkLabel(raw) {
   if (DRINK_KEY_TO_LABEL[key]) return DRINK_KEY_TO_LABEL[key];
 
   const lower = candidate.toLowerCase();
+  let bestLabel = null;
+  let bestLength = 0;
   for (const [label, aliases] of Object.entries(DRINK_LABEL_ALIASES)) {
-    if (aliases.some((alias) => lower.includes(alias.toLowerCase()))) {
-      return label;
+    for (const alias of aliases) {
+      const a = alias.toLowerCase();
+      if (a.length > bestLength && lower.includes(a)) {
+        bestLabel = label;
+        bestLength = a.length;
+      }
     }
   }
-  return candidate;
+  return bestLabel || candidate;
 }
 
 function extractDrinksFromItem(item, quantity = 1) {
@@ -160,7 +166,7 @@ function extractDrinksFromItem(item, quantity = 1) {
   }
 
   const byName = normalizeDrinkLabel(item?.name);
-  if (byName) {
+  if (byName && Object.prototype.hasOwnProperty.call(DRINK_LABEL_ALIASES, byName)) {
     for (let i = 0; i < qty; i += 1) results.push(byName);
   }
 

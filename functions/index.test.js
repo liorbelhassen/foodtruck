@@ -88,10 +88,20 @@ describe("drinks", () => {
     expect(t.extractDrinksFromItem(item, 1)).toEqual(["קוקה קולה", "ספרייט"]);
   });
 
-  // Known bug: normalizeDrinkLabel returns any unknown name as-is, so food items
-  // (e.g. "המבורגר") end up in the drinks inventory of the report.
-  it.fails("does not count food items as drinks", () => {
+  it("does not count food items as drinks", () => {
     expect(t.extractDrinksFromItem({ name: "המבורגר" }, 1)).toEqual([]);
+    expect(t.extractDrinksFromItem({ name: "צ'יפס" }, 2)).toEqual([]);
+  });
+
+  it("still detects a drink from the item name when drinkType is missing", () => {
+    expect(t.extractDrinksFromItem({ name: "ספרייט" }, 2)).toEqual(["ספרייט", "ספרייט"]);
+  });
+
+  it("prefers the most specific alias", () => {
+    expect(t.normalizeDrinkLabel("קולה זירו")).toBe("קולה זירו");
+    expect(t.normalizeDrinkLabel("המבורגר + צ'יפס + קולה זירו")).toBe("קולה זירו");
+    expect(t.normalizeDrinkLabel("מים ענבים")).toBe("מים ענבים");
+    expect(t.normalizeDrinkLabel("מים")).toBe("מים");
   });
 });
 
@@ -191,11 +201,20 @@ describe("computeMetrics", () => {
     expect(drinks["פאנטה"]).toBe(2);
   });
 
-  // Known bug: computeMetrics re-normalizes "קולה זירו", which matches the "קולה"
-  // alias of Coca-Cola first, so Coke Zero is reported as Coca-Cola.
-  it.fails("reports Coke Zero separately from Coca-Cola", () => {
-    const r = t.computeMetrics([{ items: [{ name: "שתיה", drinkType: "cokeZero" }] }], "2026-10-29");
-    expect(r.inventory.drinks).toEqual([{ drink: "קולה זירו", count: 1 }]);
+  it("reports Coke Zero and flavoured water separately", () => {
+    const r = t.computeMetrics(
+      [{ items: [{ name: "שתיה", drinkType: "cokeZero" }, { name: "שתיה", drinkType: "grapewater" }] }],
+      "2026-10-29"
+    );
+    expect(r.inventory.drinks).toEqual([
+      { drink: "קולה זירו", count: 1 },
+      { drink: "מים ענבים", count: 1 },
+    ]);
+  });
+
+  it("does not list food items in the drinks inventory", () => {
+    const drinks = m().inventory.drinks.map((d) => d.drink);
+    expect(drinks).not.toContain("המבורגר");
   });
 
   it("finds busiest hour, top item and average prep time", () => {
