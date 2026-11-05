@@ -247,7 +247,7 @@ export default function App() {
     deliveryPhone,
     pickupTime,
   } = {}) => {
-    const fee = deliveryTime ? DELIVERY_FEES_BY_CITY[deliveryCity] || 0 : 0;
+    const fee = DELIVERY_FEES_BY_CITY[deliveryCity] || 0;
     const total = cart.reduce((sum, item) => sum + item.price, 0) + fee;
 
     const createdOrderRef = await createOrder({
