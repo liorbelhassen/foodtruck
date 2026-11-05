@@ -210,7 +210,7 @@ export default function CashierScreen({
               <div style={{ display: "grid", gap: "10px", marginBottom: "10px" }}>
                 {(order.items || []).map((item, idx) => (
                   <div key={`${order.id}-${idx}`} style={{ display: "flex", gap: "10px", alignItems: "center", background: "#f8fafc", borderRadius: "12px", padding: "8px 10px" }}>
-                    <div style={{ width: "60px", height: "60px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
+                    <div style={{ width: "96px", height: "60px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
                       <MenuVisual parts={buildItemParts(item, menuPartsById)} size="small" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
