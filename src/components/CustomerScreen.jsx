@@ -24,6 +24,7 @@ import {
   baseCenter,
   priceStyle,
   titleStyle,
+  DELIVERY_FEES_BY_CITY,
 } from "./customer/customerConstants.js";
 import {
   cardStyle,
@@ -789,7 +790,6 @@ function MobileSummaryDrawer({
   );
 }
 
-const DELIVERY_FEES_BY_CITY = { "בני דקלים": 4, "אליאב": 7, "כרמי קטיף": 7 };
 
 const deliveryLabelStyle = {
   fontWeight: 900,
@@ -797,44 +797,6 @@ const deliveryLabelStyle = {
   fontSize: 15,
   marginBottom: 8,
 };
-
-function deliveryChoiceStyle(selected) {
-  return {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: "12px 4px",
-    borderRadius: 14,
-    border: `2px solid ${selected ? "#d97706" : "#f59e0b"}`,
-    background: selected ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" : "white",
-    color: selected ? "white" : "#92400e",
-    fontWeight: 800,
-    fontSize: 16,
-    fontFamily: "inherit",
-    cursor: "pointer",
-    transition: "all 0.15s",
-    boxShadow: selected ? "0 4px 12px rgba(245,158,11,0.35)" : "0 2px 6px rgba(146,64,14,0.12)",
-  };
-}
-
-function deliveryInputStyle(filled) {
-  return {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "14px 16px",
-    borderRadius: 14,
-    border: `2px solid ${filled ? "#d97706" : "#f59e0b"}`,
-    fontSize: 16,
-    fontWeight: 700,
-    fontFamily: "inherit",
-    outline: "none",
-    direction: "rtl",
-    background: "white",
-    color: "#0f172a",
-    boxShadow: filled ? "none" : "0 0 0 4px rgba(245,158,11,0.18)",
-  };
-}
 
 export default function CustomerScreen({
   customerName = "",
@@ -1649,7 +1611,6 @@ export default function CustomerScreen({
         deliveryCity,
         deliveryPhone,
         pickupTime: orderType === "pickup" ? pickupTime || DEFAULT_PICKUP_TIME : null,
-        deliveryFee,
       });
       setShowConfirm(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2388,7 +2349,23 @@ export default function CustomerScreen({
                               type="button"
                               aria-pressed={deliveryTime === time}
                               onClick={() => setDeliveryTime(deliveryTime === time ? null : time)}
-                              style={deliveryChoiceStyle(deliveryTime === time)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6,
+                                padding: "12px 4px",
+                                borderRadius: 14,
+                                border: `2px solid ${(deliveryTime === time) ? "#d97706" : "#f59e0b"}`,
+                                background: (deliveryTime === time) ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" : "white",
+                                color: (deliveryTime === time) ? "white" : "#92400e",
+                                fontWeight: 800,
+                                fontSize: 16,
+                                fontFamily: "inherit",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+                                boxShadow: (deliveryTime === time) ? "0 4px 12px rgba(245,158,11,0.35)" : "0 2px 6px rgba(146,64,14,0.12)",
+                              }}
                             >
                               <span>{deliveryTime === time ? "✓" : "○"}</span>
                               <span>{time}</span>
@@ -2409,7 +2386,19 @@ export default function CustomerScreen({
                               aria-pressed={deliveryCity === city}
                               onClick={() => setDeliveryCity(city)}
                               style={{
-                                ...deliveryChoiceStyle(deliveryCity === city),
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "12px 4px",
+                                borderRadius: 14,
+                                border: `2px solid ${(deliveryCity === city) ? "#d97706" : "#f59e0b"}`,
+                                background: (deliveryCity === city) ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" : "white",
+                                color: (deliveryCity === city) ? "white" : "#92400e",
+                                fontWeight: 800,
+                                fontFamily: "inherit",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+                                boxShadow: (deliveryCity === city) ? "0 4px 12px rgba(245,158,11,0.35)" : "0 2px 6px rgba(146,64,14,0.12)",
                                 flexDirection: "column",
                                 gap: 2,
                                 fontSize: 14,
@@ -2436,7 +2425,21 @@ export default function CustomerScreen({
                           placeholder="רחוב ומספר בית"
                           value={deliveryAddress}
                           onChange={(e) => setDeliveryAddress(e.target.value)}
-                          style={deliveryInputStyle(!!deliveryAddress.trim())}
+                          style={{
+                            width: "100%",
+                            boxSizing: "border-box",
+                            padding: "14px 16px",
+                            borderRadius: 14,
+                            border: `2px solid ${deliveryAddress.trim() ? "#d97706" : "#f59e0b"}`,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            fontFamily: "inherit",
+                            outline: "none",
+                            direction: "rtl",
+                            background: "white",
+                            color: "#0f172a",
+                            boxShadow: deliveryAddress.trim() ? "none" : "0 0 0 4px rgba(245,158,11,0.18)",
+                          }}
                         />
                       </label>
 
@@ -2450,7 +2453,21 @@ export default function CustomerScreen({
                           placeholder="לדוגמה 050-1234567"
                           value={deliveryPhone}
                           onChange={(e) => setDeliveryPhone(e.target.value)}
-                          style={deliveryInputStyle(!!deliveryPhone.trim())}
+                          style={{
+                            width: "100%",
+                            boxSizing: "border-box",
+                            padding: "14px 16px",
+                            borderRadius: 14,
+                            border: `2px solid ${deliveryPhone.trim() ? "#d97706" : "#f59e0b"}`,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            fontFamily: "inherit",
+                            outline: "none",
+                            direction: "rtl",
+                            background: "white",
+                            color: "#0f172a",
+                            boxShadow: deliveryPhone.trim() ? "none" : "0 0 0 4px rgba(245,158,11,0.18)",
+                          }}
                         />
                       </label>
                     </div>

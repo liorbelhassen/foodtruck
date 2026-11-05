@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CustomerScreen from "./components/CustomerScreen.jsx";
+import { DELIVERY_FEES_BY_CITY } from "./components/customer/customerConstants.js";
 import CashierScreen from "./components/CashierScreen.jsx";
 import KitchenScreen from "./components/KitchenScreen.jsx";
 import AnalyticsScreen from "./components/AnalyticsScreen.jsx";
@@ -245,9 +246,8 @@ export default function App() {
     deliveryCity,
     deliveryPhone,
     pickupTime,
-    deliveryFee,
   } = {}) => {
-    const fee = Number(deliveryFee) || 0;
+    const fee = deliveryTime ? DELIVERY_FEES_BY_CITY[deliveryCity] || 0 : 0;
     const total = cart.reduce((sum, item) => sum + item.price, 0) + fee;
 
     const createdOrderRef = await createOrder({
