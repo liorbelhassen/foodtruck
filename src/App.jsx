@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CustomerScreen from "./components/CustomerScreen.jsx";
+import { DELIVERY_FEES_BY_CITY } from "./components/customer/customerConstants.js";
 import CashierScreen from "./components/CashierScreen.jsx";
 import KitchenScreen from "./components/KitchenScreen.jsx";
 import AnalyticsScreen from "./components/AnalyticsScreen.jsx";
@@ -14,6 +15,7 @@ import {
   logout,
   subscribeToAuth,
 } from "./services/auth";
+import { logSiteVisit } from "./services/siteVisits";
 
 import { doc, serverTimestamp as firestoreServerTimestamp, updateDoc } from "firebase/firestore";
 import {
@@ -144,6 +146,14 @@ export default function App() {
     }
   }, [authReady, user]);
 
+  const loggedVisitUidRef = useRef(null);
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (loggedVisitUidRef.current === user.uid) return;
+    loggedVisitUidRef.current = user.uid;
+    logSiteVisit(user.uid, !!user.isAnonymous).catch(console.error);
+  }, [user?.uid, user?.isAnonymous]);
+
   useEffect(() => {
     const unsubscribe = subscribeToOrders((orders) => {
       setFirebaseOrders(orders);
@@ -229,8 +239,16 @@ export default function App() {
     return () => unsubscribe();
   }, [isAdmin]);
 
-  const sendOrder = async ({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone } = {}) => {
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
+  const sendOrder = async ({
+    requestedPayment,
+    deliveryTime,
+    deliveryAddress,
+    deliveryCity,
+    deliveryPhone,
+    pickupTime,
+  } = {}) => {
+    const fee = DELIVERY_FEES_BY_CITY[deliveryCity] || 0;
+    const total = cart.reduce((sum, item) => sum + item.price, 0) + fee;
 
     const createdOrderRef = await createOrder({
       customerName: (customerName || "").trim() || "לקוח",
@@ -240,6 +258,8 @@ export default function App() {
       deliveryAddress: deliveryAddress || null,
       deliveryCity: deliveryCity || null,
       deliveryPhone: deliveryPhone || null,
+      pickupTime: pickupTime || null,
+      deliveryFee: fee || null,
       total,
       items: cart,
     });

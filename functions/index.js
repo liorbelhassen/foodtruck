@@ -20,6 +20,7 @@ const db = getFirestore();
 const storage = getStorage();
 
 const ORDERS_COLLECTION = "orders";
+const SITE_VISITS_COLLECTION = "siteVisits";
 const ISRAEL_TZ = "Asia/Jerusalem";
 const RECIPIENT_DEFAULT = "lior.belhassen@gmail.com";
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -535,6 +536,7 @@ async function buildXlsxReportBuffer({ label, orders, metrics }) {
     { header: "Payment Requested", key: "paymentRequested", width: 18 },
     { header: "Payment Actual", key: "paymentActual", width: 18 },
     { header: "Payment Method", key: "paymentMethod", width: 16 },
+    { header: "Pickup Time", key: "pickupTime", width: 14 },
     { header: "Total", key: "total", width: 12 },
     { header: "CreatedAtClient", key: "createdAtClient", width: 18 },
     { header: "CreatedAt", key: "createdAt", width: 26 },
@@ -554,6 +556,7 @@ async function buildXlsxReportBuffer({ label, orders, metrics }) {
       paymentRequested: order.paymentRequested ?? "",
       paymentActual: order.paymentActual ?? "",
       paymentMethod: order.paymentMethod ?? "",
+      pickupTime: order.pickupTime ?? "",
       total: Number(order.total) || 0,
       createdAtClient:
         typeof order.createdAtClient === "number" && Number.isFinite(order.createdAtClient)
@@ -731,6 +734,143 @@ async function buildAndDeliverReport({
   };
 }
 
+async function fetchSiteVisitsForRange(startDateKey, endDateKey) {
+  const visitsRef = db.collection(SITE_VISITS_COLLECTION);
+  const snap = await visitsRef
+    .where("dateKey", ">=", startDateKey)
+    .where("dateKey", "<=", endDateKey)
+    .get();
+
+  return snap.docs.map((docSnap) => docSnap.data());
+}
+
+// כל מסמך ב-siteVisits הוא כניסה ייחודית של משתמש (uid) ליום (dateKey) אחד -
+// כתיבות חוזרות של אותו משתמש באותו יום עושות merge לאותו מסמך. כך שספירת
+// המסמכים בטווח = סכום המבקרים הייחודיים לכל יום בשבוע (בלי לספור כניסות
+// חוזרות של אותו אדם באותו יום, אבל כן סופר אותו אדם בכל יום שהוא חוזר בו).
+function computeVisitMetrics(visits, startDateKey, endDateKey) {
+  const countByDate = new Map();
+  const uniqueUidsInWeek = new Set();
+  let customerVisits = 0;
+  let staffVisits = 0;
+
+  visits.forEach((visit) => {
+    const dateKey = String(visit?.dateKey || "");
+    if (dateKey) {
+      countByDate.set(dateKey, (countByDate.get(dateKey) || 0) + 1);
+    }
+    if (visit?.uid) uniqueUidsInWeek.add(visit.uid);
+    if (visit?.role === "staff") {
+      staffVisits += 1;
+    } else {
+      customerVisits += 1;
+    }
+  });
+
+  const days = [];
+  let cursor = DateTime.fromISO(startDateKey, { zone: ISRAEL_TZ });
+  const end = DateTime.fromISO(endDateKey, { zone: ISRAEL_TZ });
+  while (cursor.isValid && cursor <= end) {
+    const key = cursor.toFormat("yyyy-LL-dd");
+    days.push({ dateKey: key, count: countByDate.get(key) || 0 });
+    cursor = cursor.plus({ days: 1 });
+  }
+
+  return {
+    totalVisits: visits.length,
+    uniqueVisitorsInWeek: uniqueUidsInWeek.size,
+    customerVisits,
+    staffVisits,
+    days,
+  };
+}
+
+function buildVisitsReportHtml({ label, metrics }) {
+  const rows = metrics.days
+    .map(
+      (day) =>
+        `<tr><td style="padding:4px 10px;border:1px solid #e2e8f0">${day.dateKey}</td><td style="padding:4px 10px;border:1px solid #e2e8f0;text-align:center">${day.count}</td></tr>`
+    )
+    .join("");
+
+  return `
+    <div dir="rtl" style="font-family:Arial,sans-serif;color:#0f172a">
+      <h2>דוח כניסות שבועי לאתר</h2>
+      <p style="color:#475569">תקופה: ${label}</p>
+      <p><strong>סה"כ כניסות ייחודיות לאורך השבוע:</strong> ${metrics.totalVisits}</p>
+      <p><strong>מבקרים ייחודיים (uid נבדל) באותו שבוע:</strong> ${metrics.uniqueVisitorsInWeek}</p>
+      <p><strong>כניסות לקוחות:</strong> ${metrics.customerVisits} &nbsp;|&nbsp; <strong>כניסות צוות/אדמין:</strong> ${metrics.staffVisits}</p>
+      <table style="border-collapse:collapse;margin-top:10px">
+        <thead>
+          <tr>
+            <th style="padding:4px 10px;border:1px solid #e2e8f0;background:#f1f5f9">תאריך</th>
+            <th style="padding:4px 10px;border:1px solid #e2e8f0;background:#f1f5f9">מבקרים ייחודיים</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function sendVisitsReportEmail({ label, metrics, toEmail = RECIPIENT_DEFAULT }) {
+  const fromAddress = DAILY_REPORT_FROM;
+  if (!RESEND_API_KEY || !fromAddress) {
+    logger.warn(
+      "Email is not configured. Skipping visits email send.",
+      "Set RESEND_API_KEY and DAILY_REPORT_FROM."
+    );
+    return { emailed: false, reason: "mail_not_configured" };
+  }
+
+  await resend.emails.send({
+    from: fromAddress,
+    to: toEmail,
+    subject: `דוח כניסות שבועי לאתר - ${label}`,
+    html: buildVisitsReportHtml({ label, metrics }),
+  });
+
+  return { emailed: true };
+}
+
+async function buildAndDeliverVisitsReport({
+  startDateKey,
+  endDateKey,
+  mode = "scheduled",
+  recipientEmail = RECIPIENT_DEFAULT,
+}) {
+  const label = startDateKey === endDateKey ? startDateKey : `${startDateKey} – ${endDateKey}`;
+
+  logger.info("Starting site visits report generation", { startDateKey, endDateKey, mode });
+
+  const visits = await fetchSiteVisitsForRange(startDateKey, endDateKey);
+  const metrics = computeVisitMetrics(visits, startDateKey, endDateKey);
+
+  const emailResult = await sendVisitsReportEmail({
+    label,
+    metrics,
+    toEmail: recipientEmail,
+  });
+
+  logger.info("Site visits report generation complete", {
+    startDateKey,
+    endDateKey,
+    mode,
+    totalVisits: metrics.totalVisits,
+    uniqueVisitorsInWeek: metrics.uniqueVisitorsInWeek,
+    emailed: emailResult.emailed,
+  });
+
+  return {
+    startDateKey,
+    endDateKey,
+    mode,
+    ...metrics,
+    emailed: emailResult.emailed,
+    emailReason: emailResult.reason || null,
+  };
+}
+
 function extractManualToken(req) {
   const bearer = req.headers.authorization || "";
   const bearerToken = bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "";
@@ -776,6 +916,70 @@ export const generateWeeklyReportFridayIl = onSchedule(
       mode: "scheduled-weekly",
       recipientEmail: DAILY_REPORT_TO,
     });
+  }
+);
+
+export const generateWeeklySiteVisitsReportFridayIl = onSchedule(
+  {
+    // Every Friday at 06:00 Israel time (cron day-of-week 5 = Friday) - a
+    // separate email from the sales report above.
+    schedule: "0 6 * * 5",
+    timeZone: ISRAEL_TZ,
+    region: "us-central1",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async () => {
+    const { startDateKey, endDateKey } = getWeekDateKeysEndingYesterday();
+    await buildAndDeliverVisitsReport({
+      startDateKey,
+      endDateKey,
+      mode: "scheduled-weekly",
+      recipientEmail: DAILY_REPORT_TO,
+    });
+  }
+);
+
+export const generateSiteVisitsReportNow = onRequest(
+  {
+    region: "us-central1",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async (req, res) => {
+    try {
+      if (!["GET", "POST"].includes(req.method)) {
+        res.status(405).json({ ok: false, error: "Method not allowed" });
+        return;
+      }
+
+      const expectedToken = process.env.REPORTS_MANUAL_TOKEN;
+      if (expectedToken) {
+        const receivedToken = String(extractManualToken(req) || "");
+        if (!receivedToken || receivedToken !== expectedToken) {
+          res.status(403).json({ ok: false, error: "Forbidden" });
+          return;
+        }
+      }
+
+      const { startDateKey, endDateKey } = resolveManualRange(req);
+      const recipientEmail = String(req.query.to || req.body?.to || DAILY_REPORT_TO);
+
+      const result = await buildAndDeliverVisitsReport({
+        startDateKey,
+        endDateKey,
+        mode: "manual",
+        recipientEmail,
+      });
+
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      logger.error("Manual site visits report generation failed", error);
+      res.status(500).json({
+        ok: false,
+        error: error?.message || "Failed to generate site visits report",
+      });
+    }
   }
 );
 

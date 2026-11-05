@@ -65,3 +65,5 @@ export const priceStyle = {
   color: THEME.accent,
   whiteSpace: "nowrap",
 };
+
+export const DELIVERY_FEES_BY_CITY = { "בני דקלים": 4, "אליאב": 7, "כרמי קטיף": 7 };
