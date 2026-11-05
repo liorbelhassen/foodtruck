@@ -18,7 +18,7 @@ export const DRINK_OPTIONS = [
 export const EXTRA_DRINK_OPTIONS = [
   { key: "grapeWater", label: "מים ענבים", imageSrc: "/grape-water.png" },
   { key: "peachWater", label: "מים אפרסק", imageSrc: "/peach-water.png" },
-  { key: "fuzetea", label: "פיוזטי", imageSrc: "/fuzetea.jpeg" },
+  { key: "fuzetea", label: "פיוזטי", imageSrc: "/fuzetea.jpeg", soldOut: true },
 ];
 
 export const ALL_TOPPINGS = [

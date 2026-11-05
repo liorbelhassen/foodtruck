@@ -281,8 +281,9 @@ function MenuItemCard({
                   <DrinkChip
                     key={`${item.id}-${drink.key}`}
                     imageSrc={drink.imageSrc}
-                    label={drink.label}
+                    label={drink.soldOut ? `${drink.label} - חסר במלאי` : drink.label}
                     active={currentDrink === drink.key}
+                    disabled={drink.soldOut}
                     onClick={() => onSelectStandaloneDrink(item.id, drink.key)}
                   />
                 ))}
@@ -1725,7 +1726,7 @@ export default function CustomerScreen({
     }
 
     const selectedDrink = getDrinkOptionsForItem(item).find((d) => d.key === selectedDrinkKey);
-    if (!selectedDrink) return;
+    if (!selectedDrink || selectedDrink.soldOut) return;
 
     setCart([
       ...cart,
