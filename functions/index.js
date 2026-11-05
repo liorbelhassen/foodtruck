@@ -1075,3 +1075,23 @@ export const sendTestEmail = onRequest(
     }
   }
 );
+
+export const __testables = {
+  toMillis,
+  getIsraelDateKey,
+  getRangeWindow,
+  getWeekDateKeysEndingYesterday,
+  getOrderCreatedMillis,
+  normalizePaymentMethod,
+  normalizeDrinkLabel,
+  extractDrinksFromItem,
+  isFamilyDealItem,
+  isHamburgerItem,
+  isHotdogItem,
+  getPrepDurationMs,
+  computeMetrics,
+  formatMoney,
+  formatDurationMinutes,
+  extractManualToken,
+  resolveManualRange,
+};
