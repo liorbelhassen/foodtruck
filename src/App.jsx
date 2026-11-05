@@ -109,6 +109,7 @@ export default function App() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerConfirmed, setCustomerConfirmed] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [cart, setCart] = useState([]);
   const [selectedMods, setSelectedMods] = useState([]);
 
@@ -549,6 +550,28 @@ export default function App() {
             כמה אנשים מחוברים ברגע זה: {connectedCustomersCount} ▾
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => setShowContacts(true)}
+          style={{
+            marginInlineStart: isAdmin ? 0 : "auto",
+            padding: isDesktop ? "8px 14px" : "9px 16px",
+            borderRadius: "999px",
+            border: "1px solid #a7f3d0",
+            background: "#ecfdf5",
+            color: "#047857",
+            fontWeight: 900,
+            fontSize: isDesktop ? "14px" : "15px",
+            lineHeight: 1.2,
+            whiteSpace: "nowrap",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            boxShadow: "0 6px 16px rgba(4,120,87,0.12)",
+          }}
+        >
+          📞 צור קשר
+        </button>
       </div>
 
       {isAdmin &&
@@ -900,72 +923,101 @@ export default function App() {
           ))}
       </div>
 
-      {screen === "customer" && (
-        <div
-          style={{
-            maxWidth: 760,
-            margin: isMobile ? "16px auto 120px" : "20px auto 10px",
-            padding: isMobile ? "16px 14px" : "18px 20px",
-            borderRadius: 22,
-            background: "rgba(255,255,255,0.92)",
-            border: "1px solid #dbe7e4",
-            boxShadow: "0 10px 26px rgba(15,23,42,0.08)",
-            direction: "rtl",
-            textAlign: "right",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: isMobile ? 18 : 19, color: "#0f172a" }}>📞 צור קשר</div>
-          <div style={{ color: "#64748b", fontSize: 13, fontWeight: 700, marginTop: 2, marginBottom: 12 }}>
-            מנהלי הפודטראק
-          </div>
+      {showContacts &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
+            onClick={() => setShowContacts(false)}
             style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-              gap: 10,
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15,23,42,0.52)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 40,
             }}
           >
-            {FOODTRUCK_MANAGERS.map((m) => (
-              <div
-                key={m.phone}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  padding: "10px 12px",
-                  borderRadius: 16,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{m.name}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{m.role}</div>
-                </div>
-                <a
-                  href={`tel:${m.phone.replace(/\D/g, "")}`}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 420,
+                maxHeight: "85vh",
+                overflowY: "auto",
+                background: "white",
+                borderRadius: 22,
+                border: "1px solid #dbe7e4",
+                boxShadow: "0 24px 70px rgba(15,23,42,0.24)",
+                padding: isMobile ? "16px 14px" : "18px 20px",
+                display: "grid",
+                gap: 10,
+                direction: "rtl",
+                textAlign: "right",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 19, color: "#0f172a" }}>📞 צור קשר</div>
+                <div style={{ color: "#64748b", fontSize: 13, fontWeight: 700, marginTop: 2 }}>מנהלי הפודטראק</div>
+              </div>
+              {FOODTRUCK_MANAGERS.map((m) => (
+                <div
+                  key={m.phone}
                   style={{
-                    flexShrink: 0,
-                    padding: "8px 12px",
-                    borderRadius: 999,
-                    background: "#ecfdf5",
-                    border: "1px solid #a7f3d0",
-                    color: "#047857",
-                    fontWeight: 800,
-                    fontSize: 14,
-                    textDecoration: "none",
-                    direction: "ltr",
-                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    padding: "10px 12px",
+                    borderRadius: 16,
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
                   }}
                 >
-                  📱 {m.phone}
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{m.name}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{m.role}</div>
+                  </div>
+                  <a
+                    href={`tel:${m.phone.replace(/\D/g, "")}`}
+                    style={{
+                      flexShrink: 0,
+                      padding: "8px 12px",
+                      borderRadius: 999,
+                      background: "#ecfdf5",
+                      border: "1px solid #a7f3d0",
+                      color: "#047857",
+                      fontWeight: 800,
+                      fontSize: 14,
+                      textDecoration: "none",
+                      direction: "ltr",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    📱 {m.phone}
+                  </a>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowContacts(false)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #cbd5e1",
+                  background: "white",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                סגור
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {showOrderSuccess && (
         <div
