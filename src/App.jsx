@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CustomerScreen from "./components/CustomerScreen.jsx";
+import InventoryScreen from "./components/InventoryScreen.jsx";
+import { subscribeToInventory } from "./services/inventory.js";
 import { DELIVERY_FEES_BY_CITY } from "./components/customer/customerConstants.js";
 import CashierScreen from "./components/CashierScreen.jsx";
 import KitchenScreen from "./components/KitchenScreen.jsx";
@@ -86,6 +88,7 @@ function authBtnStyle(primary = false, compact = false) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [soldOut, setSoldOut] = useState({});
   const [showAdminEmailLogin, setShowAdminEmailLogin] = useState(false);
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
@@ -161,6 +164,11 @@ export default function App() {
     const unsubscribe = subscribeToOrders((orders) => {
       setFirebaseOrders(orders);
     });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToInventory(setSoldOut);
     return () => unsubscribe();
   }, []);
 
@@ -671,12 +679,21 @@ export default function App() {
           >
             משלוחים
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setScreen("inventory")}
+              style={navBtn(screen === "inventory", isDesktop)}
+            >
+              מלאי
+            </button>
+          )}
         </div>
       </div>
 
       <div>
         {screen === "customer" && (
           <CustomerScreen
+            soldOut={soldOut}
             customerName={customerName}
             setCustomerName={setCustomerName}
             customerConfirmed={customerConfirmed}
@@ -739,6 +756,15 @@ export default function App() {
         {screen === "analytics" &&
           (isAdmin ? (
             <AnalyticsScreen />
+          ) : (
+            <div style={{ padding: "20px", borderRadius: "20px", background: "rgba(255,255,255,0.92)", border: "1px solid #dbe7e4", fontWeight: 700 }}>
+              צריך להתחבר
+            </div>
+          ))}
+
+        {screen === "inventory" &&
+          (isAdmin ? (
+            <InventoryScreen soldOut={soldOut} />
           ) : (
             <div style={{ padding: "20px", borderRadius: "20px", background: "rgba(255,255,255,0.92)", border: "1px solid #dbe7e4", fontWeight: 700 }}>
               צריך להתחבר

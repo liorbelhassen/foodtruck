@@ -15,10 +15,13 @@ export const DRINK_OPTIONS = [
   },
 ];
 
+export const menuStockKey = (itemId) => `menu-${itemId}`;
+export const drinkStockKey = (drinkKey) => `drink-${drinkKey}`;
+
 export const EXTRA_DRINK_OPTIONS = [
   { key: "grapeWater", label: "מים ענבים", imageSrc: "/grape-water.png" },
   { key: "peachWater", label: "מים אפרסק", imageSrc: "/peach-water.png" },
-  { key: "fuzetea", label: "פיוזטי", imageSrc: "/fuzetea.jpeg", soldOut: true },
+  { key: "fuzetea", label: "פיוזטי", imageSrc: "/fuzetea.jpeg" },
 ];
 
 export const ALL_TOPPINGS = [
