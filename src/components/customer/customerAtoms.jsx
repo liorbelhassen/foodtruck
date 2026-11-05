@@ -150,18 +150,20 @@ export function ToppingChip(props) {
 }
 
 export function DrinkChip(props) {
-  const { label, imageSrc, active, onClick } = props;
+  const { label, imageSrc, active, onClick, disabled } = props;
 
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
+        opacity: disabled ? 0.5 : 1,
         width: "100%",
         minHeight: 56,
         borderRadius: 14,
         border: active ? `1.5px solid ${THEME.accent}` : `1px solid ${THEME.borderSoft}`,
         background: active ? "#f0fdfa" : "#fff",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         display: "grid",
         gridTemplateColumns: "40px minmax(0, 1fr) 18px",
         alignItems: "center",

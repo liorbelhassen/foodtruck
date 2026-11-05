@@ -32,7 +32,7 @@ export const menu = [
   {
     id: 1,
     name: "המבורגר + צ'יפס + שתיה",
-    price: 40,
+    price: 43,
     allowsToppings: true,
     parts: [
       {
@@ -45,7 +45,7 @@ export const menu = [
   {
     id: 2,
     name: "המבורגר",
-    price: 32,
+    price: 35,
     allowsToppings: true,
     parts: [
       {
