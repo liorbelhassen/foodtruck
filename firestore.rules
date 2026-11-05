@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /orders/{orderId} {
+      allow create, read, update, delete: if request.auth != null;
+    }
+
+    match /counters/{dateKey} {
+      allow read, create, update: if request.auth != null;
+    }
+
+    match /menuRatings/{itemId} {
+      allow read, create, update: if request.auth != null;
+    }
+
+    match /inventory/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+  }
+}

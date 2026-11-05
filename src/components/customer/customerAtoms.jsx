@@ -41,11 +41,13 @@ export function PaymentChoiceButton({ label, active, onClick, theme = "dark" }) 
   );
 }
 
-export function QtyButton({ children, onClick, filled = false }) {
+export function QtyButton({ children, onClick, filled = false, disabled = false }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
+        opacity: disabled ? 0.4 : 1,
         width: 48,
         height: 44,
         borderRadius: 14,
@@ -54,7 +56,7 @@ export function QtyButton({ children, onClick, filled = false }) {
           ? `linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.warm} 100%)`
           : "white",
         color: filled ? "white" : THEME.accentDeep,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         fontSize: 24,
         fontWeight: 700,
         boxShadow: filled ? "0 10px 24px rgba(15,118,110,0.20)" : "none",

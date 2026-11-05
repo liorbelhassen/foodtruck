@@ -25,6 +25,8 @@ import {
   priceStyle,
   titleStyle,
   DELIVERY_FEES_BY_CITY,
+  drinkStockKey,
+  menuStockKey,
 } from "./customer/customerConstants.js";
 import {
   cardStyle,
@@ -186,8 +188,19 @@ function formatReviewDate(value) {
   return "";
 }
 
+const SOLD_OUT_BADGE_STYLE = {
+  color: "#b91c1c",
+  background: "#fef2f2",
+  border: "1px solid #fca5a5",
+  borderRadius: 999,
+  padding: "2px 10px",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
 function MenuItemCard({
   item,
+  soldOut = {},
   qty,
   currentMods,
   currentDrink,
@@ -206,6 +219,7 @@ function MenuItemCard({
   const standaloneDrink = isStandaloneDrinkItem(item);
   const familyDeal = isFamilyDealItem(item);
   const drinkOptions = getDrinkOptionsForItem(item);
+  const itemSoldOut = soldOut[menuStockKey(item.id)] === true;
 
   if (standaloneDrink) {
     return (
@@ -263,7 +277,9 @@ function MenuItemCard({
                   </div>
                 )}
               </div>
-              <div style={priceStyle}>₪{item.price}</div>
+              <div style={priceStyle}>
+                {itemSoldOut && <span style={SOLD_OUT_BADGE_STYLE}>חסר במלאי</span>} ₪{item.price}
+              </div>
             </div>
 
             <div style={panelStyle()}>
@@ -281,9 +297,9 @@ function MenuItemCard({
                   <DrinkChip
                     key={`${item.id}-${drink.key}`}
                     imageSrc={drink.imageSrc}
-                    label={drink.soldOut ? `${drink.label} - חסר במלאי` : drink.label}
+                    label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
                     active={currentDrink === drink.key}
-                    disabled={drink.soldOut}
+                    disabled={soldOut[drinkStockKey(drink.key)] === true}
                     onClick={() => onSelectStandaloneDrink(item.id, drink.key)}
                   />
                 ))}
@@ -315,7 +331,7 @@ function MenuItemCard({
                 alignItems: "center",
               }}
             >
-              <QtyButton onClick={onAdd} filled>
+              <QtyButton onClick={onAdd} filled disabled={itemSoldOut}>
                 +
               </QtyButton>
               <QtyButton onClick={onRemove}>-</QtyButton>
@@ -372,7 +388,7 @@ function MenuItemCard({
               alignItems: "center",
             }}
           >
-            <QtyButton onClick={onAdd} filled>
+            <QtyButton onClick={onAdd} filled disabled={itemSoldOut}>
               +
             </QtyButton>
             <QtyButton onClick={onRemove}>-</QtyButton>
@@ -413,7 +429,9 @@ function MenuItemCard({
                 </button>
               </div>
             )}
-            <div style={{ ...priceStyle, fontSize: isMobile ? 20 : 24 }}>₪{item.price}</div>
+            <div style={{ ...priceStyle, fontSize: isMobile ? 20 : 24 }}>
+              {itemSoldOut && <span style={SOLD_OUT_BADGE_STYLE}>חסר במלאי</span>} ₪{item.price}
+            </div>
           </div>
 
           <div
@@ -488,8 +506,9 @@ function MenuItemCard({
                   <DrinkChip
                     key={`inline-picker-${item.id}-${drink.key}`}
                     imageSrc={drink.imageSrc}
-                    label={drink.label}
+                    label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
                     active={false}
+                    disabled={soldOut[drinkStockKey(drink.key)] === true}
                     onClick={() => onChooseMealDrink(item, drink.key)}
                   />
                 ))}
@@ -814,6 +833,7 @@ const deliveryLabelStyle = {
 };
 
 export default function CustomerScreen({
+  soldOut = {},
   customerName = "",
   setCustomerName = () => {},
   customerConfirmed = false,
@@ -1074,8 +1094,9 @@ export default function CustomerScreen({
                         <DrinkChip
                           key={`family-drink-${index}-${drink.key}`}
                           imageSrc={drink.imageSrc}
-                          label={drink.label}
+                          label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
                           active={meal.drinkKey === drink.key}
+                          disabled={soldOut[drinkStockKey(drink.key)] === true}
                           onClick={() => selectFamilyMealDrink(index, drink.key)}
                         />
                       ))}
@@ -1610,6 +1631,17 @@ export default function CustomerScreen({
   const handleSubmitOrder = async () => {
     if (isSubmittingOrder) return;
 
+    const hasSoldOutItem = cart.some(
+      (c) =>
+        soldOut[menuStockKey(c.id)] ||
+        (c.drinkType && soldOut[drinkStockKey(c.drinkType)]) ||
+        c.familyMeals?.some((meal) => soldOut[drinkStockKey(meal.drinkKey)])
+    );
+    if (hasSoldOutItem) {
+      setSubmitOrderError("חלק מהפריטים בעגלה חסרים במלאי. הסירו אותם ונסו שוב.");
+      return;
+    }
+
     try {
       setIsSubmittingOrder(true);
       setSubmitOrderError("");
@@ -1726,7 +1758,7 @@ export default function CustomerScreen({
     }
 
     const selectedDrink = getDrinkOptionsForItem(item).find((d) => d.key === selectedDrinkKey);
-    if (!selectedDrink || selectedDrink.soldOut) return;
+    if (!selectedDrink || soldOut[drinkStockKey(selectedDrink.key)]) return;
 
     setCart([
       ...cart,
@@ -1743,7 +1775,7 @@ export default function CustomerScreen({
 
   const addMealWithDrinkToCart = (item, drinkKey) => {
     const selectedDrink = DRINK_OPTIONS.find((d) => d.key === drinkKey);
-    if (!selectedDrink) return;
+    if (!selectedDrink || soldOut[drinkStockKey(drinkKey)]) return;
 
     setCart([
       ...cart,
@@ -1770,6 +1802,7 @@ export default function CustomerScreen({
   }
 
   function selectFamilyMealDrink(mealIndex, drinkKey) {
+    if (soldOut[drinkStockKey(drinkKey)]) return;
     setFamilyMealConfigs((prev) =>
       prev.map((meal, idx) => (idx === mealIndex ? { ...meal, drinkKey } : meal))
     );
@@ -1822,6 +1855,8 @@ export default function CustomerScreen({
   }
 
   const addToCart = (item) => {
+    if (soldOut[menuStockKey(item.id)]) return;
+
     if (isFamilyDealItem(item)) {
       setFamilyDealItem(item);
       setFamilyMealConfigs(createInitialFamilyMealsConfig());
@@ -2116,6 +2151,7 @@ export default function CustomerScreen({
                 <MenuItemCard
                   key={item.id}
                   item={item}
+                  soldOut={soldOut}
                   qty={cart.filter((c) => c.id === item.id).length}
                   currentMods={getModsForItem(item.id)}
                   currentDrink={getDrinkForItem(item.id)}
