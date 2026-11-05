@@ -784,6 +784,53 @@ function MobileSummaryDrawer({
   );
 }
 
+const DELIVERY_FEES_BY_CITY = { "בני דקלים": 4, "אליאב": 7, "כרמי קטיף": 7 };
+
+const deliveryLabelStyle = {
+  fontWeight: 900,
+  color: "#78350f",
+  fontSize: 15,
+  marginBottom: 8,
+};
+
+function deliveryChoiceStyle(selected) {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: "12px 4px",
+    borderRadius: 14,
+    border: `2px solid ${selected ? "#d97706" : "#f59e0b"}`,
+    background: selected ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" : "white",
+    color: selected ? "white" : "#92400e",
+    fontWeight: 800,
+    fontSize: 16,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    transition: "all 0.15s",
+    boxShadow: selected ? "0 4px 12px rgba(245,158,11,0.35)" : "0 2px 6px rgba(146,64,14,0.12)",
+  };
+}
+
+function deliveryInputStyle(filled) {
+  return {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "14px 16px",
+    borderRadius: 14,
+    border: `2px solid ${filled ? "#d97706" : "#f59e0b"}`,
+    fontSize: 16,
+    fontWeight: 700,
+    fontFamily: "inherit",
+    outline: "none",
+    direction: "rtl",
+    background: "white",
+    color: "#0f172a",
+    boxShadow: filled ? "none" : "0 0 0 4px rgba(245,158,11,0.18)",
+  };
+}
+
 export default function CustomerScreen({
   customerName = "",
   setCustomerName = () => {},
@@ -851,6 +898,8 @@ export default function CustomerScreen({
   const displayCustomerName = customerName.trim() || "לקוח";
   const qrOpen = requestedPayment === "bit" || requestedPayment === "paybox";
   const total = cart.reduce((sum, item) => sum + item.price, 0);
+  const deliveryFee = orderType === "delivery" ? DELIVERY_FEES_BY_CITY[deliveryCity] || 0 : 0;
+  const orderTotal = total + deliveryFee;
   const grouped = useMemo(() => groupCart(cart), [cart]);
   const customerStatusModalKey =
     customerOrder?.id && customerOrder?.status
@@ -1375,14 +1424,6 @@ export default function CustomerScreen({
   }, []);
 
   useEffect(() => {
-    if (!showConfirm) return;
-    const timer = setTimeout(() => {
-      modalRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [showConfirm]);
-
-  useEffect(() => {
     document.body.style.overflow = showConfirm ? "hidden" : "";
     document.body.style.touchAction = showConfirm ? "none" : "";
     return () => {
@@ -1410,9 +1451,14 @@ export default function CustomerScreen({
     if (requestedPayment !== "bit" && requestedPayment !== "paybox") return;
 
     const timer = setTimeout(() => {
-      qrSectionRef.current?.scrollIntoView({
+      const modalEl = modalRef.current;
+      const qrEl = qrSectionRef.current;
+      if (!modalEl || !qrEl) return;
+      const qrTop =
+        qrEl.getBoundingClientRect().top - modalEl.getBoundingClientRect().top + modalEl.scrollTop;
+      modalEl.scrollTo({
+        top: Math.max(0, qrTop - (modalEl.clientHeight - qrEl.offsetHeight) / 2),
         behavior: "smooth",
-        block: "center",
       });
     }, 40);
 
@@ -1590,7 +1636,7 @@ export default function CustomerScreen({
       ) {
         Notification.requestPermission().catch(() => {});
       }
-      await onSendOrder({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone });
+      await onSendOrder({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone, deliveryFee });
       setShowConfirm(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
@@ -2117,7 +2163,7 @@ export default function CustomerScreen({
             />
           )}
 
-          {showConfirm && (
+          {showConfirm && typeof document !== "undefined" && createPortal(
             <div
               style={{
                 position: "fixed",
@@ -2127,7 +2173,7 @@ export default function CustomerScreen({
                 alignItems: "center",
                 justifyContent: "center",
                 padding: 16,
-                zIndex: 20,
+                zIndex: 41,
               }}
             >
               <div
@@ -2211,6 +2257,26 @@ export default function CustomerScreen({
                     </div>
                   ))}
 
+                  {orderType === "delivery" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        marginTop: 8,
+                        paddingTop: 8,
+                        borderTop: `1px dashed ${THEME.borderSoft}`,
+                        color: "#92400e",
+                        fontWeight: 700,
+                      }}
+                    >
+                      <span>🛵 דמי משלוח{deliveryCity ? ` (${deliveryCity})` : ""}</span>
+                      <span style={{ fontWeight: 800 }}>
+                        {deliveryCity ? `₪${deliveryFee}` : "בחרו יישוב"}
+                      </span>
+                    </div>
+                  )}
+
                   <div
                     style={{
                       fontWeight: 900,
@@ -2219,7 +2285,7 @@ export default function CustomerScreen({
                       color: THEME.text,
                     }}
                   >
-                    סה"כ: ₪{total}
+                    סה"כ: ₪{orderTotal}
                   </div>
                 </div>
 
@@ -2271,102 +2337,89 @@ export default function CustomerScreen({
 
                   {/* פרטי משלוח — מוצג רק כשנבחר משלוח */}
                   {orderType === "delivery" && (
-                    <div style={{ padding: "14px 16px", background: "#fffbeb" }}>
-                      <div style={{ fontWeight: 800, color: "#92400e", fontSize: 14, marginBottom: 10 }}>
-                        בחר שעת משלוח:
-                      </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(3, 1fr)",
-                          gap: 8,
-                          marginBottom: 12,
-                        }}
-                      >
-                        {["19:00", "20:00", "21:00"].map((time) => (
-                          <button
-                            key={time}
-                            onClick={() => setDeliveryTime(deliveryTime === time ? null : time)}
-                            style={{
-                              padding: "11px 0",
-                              borderRadius: 14,
-                              border: `2px solid ${deliveryTime === time ? "#f59e0b" : "#fcd34d"}`,
-                              background: deliveryTime === time
-                                ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
-                                : "white",
-                              color: deliveryTime === time ? "white" : "#92400e",
-                              fontWeight: 800,
-                              fontSize: 16,
-                              cursor: "pointer",
-                              transition: "all 0.15s",
-                              boxShadow: deliveryTime === time ? "0 4px 12px rgba(245,158,11,0.35)" : "none",
-                            }}
-                          >
-                            {time}
-                          </button>
-                        ))}
+                    <div style={{ padding: "16px", background: "#fffbeb", display: "grid", gap: 16 }}>
+                      <div>
+                        <div style={deliveryLabelStyle}>
+                          🕐 בחרו שעת משלוח <span style={{ color: "#dc2626" }}>*</span>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(3, 1fr)",
+                            gap: 8,
+                          }}
+                        >
+                          {["19:00", "20:00", "21:00"].map((time) => (
+                            <button
+                              key={time}
+                              type="button"
+                              aria-pressed={deliveryTime === time}
+                              onClick={() => setDeliveryTime(deliveryTime === time ? null : time)}
+                              style={deliveryChoiceStyle(deliveryTime === time)}
+                            >
+                              <span>{deliveryTime === time ? "✓" : "○"}</span>
+                              <span>{time}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      <div style={{ display: "grid", gap: 8 }}>
+                      <div>
+                        <div style={deliveryLabelStyle}>
+                          📍 בחרו יישוב <span style={{ color: "#dc2626" }}>*</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                          {Object.entries(DELIVERY_FEES_BY_CITY).map(([city, fee]) => (
+                            <button
+                              key={city}
+                              type="button"
+                              aria-pressed={deliveryCity === city}
+                              onClick={() => setDeliveryCity(city)}
+                              style={{
+                                ...deliveryChoiceStyle(deliveryCity === city),
+                                flexDirection: "column",
+                                gap: 2,
+                                fontSize: 14,
+                              }}
+                            >
+                              <span>
+                                {deliveryCity === city ? "✓ " : "○ "}
+                                {city}
+                              </span>
+                              <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9 }}>
+                                משלוח ₪{fee}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label style={{ display: "block" }}>
+                        <div style={deliveryLabelStyle}>
+                          🏠 כתובת למשלוח <span style={{ color: "#dc2626" }}>*</span>
+                        </div>
                         <input
                           type="text"
                           placeholder="רחוב ומספר בית"
                           value={deliveryAddress}
                           onChange={(e) => setDeliveryAddress(e.target.value)}
-                          style={{
-                            padding: "10px 14px",
-                            borderRadius: 12,
-                            border: `1.5px solid ${deliveryAddress.trim() ? "#f59e0b" : "#fcd34d"}`,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            fontFamily: "inherit",
-                            outline: "none",
-                            direction: "rtl",
-                            background: "white",
-                          }}
+                          style={deliveryInputStyle(!!deliveryAddress.trim())}
                         />
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
-                          {["בני דקלים", "אליאב", "כרמי קטיף"].map((city) => (
-                            <button
-                              key={city}
-                              type="button"
-                              onClick={() => setDeliveryCity(city)}
-                              style={{
-                                padding: "10px 4px",
-                                borderRadius: 12,
-                                border: `1.5px solid ${deliveryCity === city ? "#f59e0b" : "#fcd34d"}`,
-                                background: deliveryCity === city ? "linear-gradient(135deg,#f59e0b 0%,#d97706 100%)" : "white",
-                                color: deliveryCity === city ? "white" : "#92400e",
-                                fontWeight: 800,
-                                fontSize: 13,
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                                transition: "all 0.15s",
-                                boxShadow: deliveryCity === city ? "0 4px 10px rgba(245,158,11,0.3)" : "none",
-                              }}
-                            >
-                              {city}
-                            </button>
-                          ))}
+                      </label>
+
+                      <label style={{ display: "block" }}>
+                        <div style={deliveryLabelStyle}>
+                          📞 טלפון ליצירת קשר <span style={{ color: "#dc2626" }}>*</span>
                         </div>
                         <input
                           type="tel"
-                          placeholder="מספר טלפון"
+                          inputMode="tel"
+                          placeholder="לדוגמה 050-1234567"
                           value={deliveryPhone}
                           onChange={(e) => setDeliveryPhone(e.target.value)}
-                          style={{
-                            padding: "10px 14px",
-                            borderRadius: 12,
-                            border: `1.5px solid ${deliveryPhone.trim() ? "#f59e0b" : "#fcd34d"}`,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            fontFamily: "inherit",
-                            outline: "none",
-                            direction: "rtl",
-                            background: "white",
-                          }}
+                          style={deliveryInputStyle(!!deliveryPhone.trim())}
                         />
-                      </div>
+                      </label>
                     </div>
                   )}
                 </div>
@@ -2496,7 +2549,8 @@ export default function CustomerScreen({
                   </div>
                 )}
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {familyConfigModal}

@@ -229,8 +229,9 @@ export default function App() {
     return () => unsubscribe();
   }, [isAdmin]);
 
-  const sendOrder = async ({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone } = {}) => {
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
+  const sendOrder = async ({ requestedPayment, deliveryTime, deliveryAddress, deliveryCity, deliveryPhone, deliveryFee } = {}) => {
+    const fee = Number(deliveryFee) || 0;
+    const total = cart.reduce((sum, item) => sum + item.price, 0) + fee;
 
     const createdOrderRef = await createOrder({
       customerName: (customerName || "").trim() || "לקוח",
@@ -240,6 +241,7 @@ export default function App() {
       deliveryAddress: deliveryAddress || null,
       deliveryCity: deliveryCity || null,
       deliveryPhone: deliveryPhone || null,
+      deliveryFee: fee || null,
       total,
       items: cart,
     });
