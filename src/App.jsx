@@ -904,7 +904,7 @@ export default function App() {
         <div
           style={{
             maxWidth: 760,
-            margin: isMobile ? "16px auto 8px" : "20px auto 10px",
+            margin: isMobile ? "16px auto 120px" : "20px auto 10px",
             padding: isMobile ? "16px 14px" : "18px 20px",
             borderRadius: 22,
             background: "rgba(255,255,255,0.92)",
