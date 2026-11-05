@@ -954,12 +954,10 @@ export const generateSiteVisitsReportNow = onRequest(
       }
 
       const expectedToken = process.env.REPORTS_MANUAL_TOKEN;
-      if (expectedToken) {
-        const receivedToken = String(extractManualToken(req) || "");
-        if (!receivedToken || receivedToken !== expectedToken) {
-          res.status(403).json({ ok: false, error: "Forbidden" });
-          return;
-        }
+      const receivedToken = String(extractManualToken(req) || "");
+      if (!expectedToken || !receivedToken || receivedToken !== expectedToken) {
+        res.status(403).json({ ok: false, error: "Forbidden" });
+        return;
       }
 
       const { startDateKey, endDateKey } = resolveManualRange(req);
@@ -997,12 +995,10 @@ export const generateDailyReportNow = onRequest(
       }
 
       const expectedToken = process.env.REPORTS_MANUAL_TOKEN;
-      if (expectedToken) {
-        const receivedToken = String(extractManualToken(req) || "");
-        if (!receivedToken || receivedToken !== expectedToken) {
-          res.status(403).json({ ok: false, error: "Forbidden" });
-          return;
-        }
+      const receivedToken = String(extractManualToken(req) || "");
+      if (!expectedToken || !receivedToken || receivedToken !== expectedToken) {
+        res.status(403).json({ ok: false, error: "Forbidden" });
+        return;
       }
 
       const { startDateKey, endDateKey } = resolveManualRange(req);
