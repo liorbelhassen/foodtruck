@@ -43,6 +43,20 @@ const PICKUP_TIME_MIN = "18:30";
 const PICKUP_TIME_MAX = "23:00";
 const DEFAULT_PICKUP_TIME = PICKUP_TIME_MIN;
 
+// השעה המוקדמת ביותר שאפשר לבחור לאיסוף: עכשיו (שעון ישראל) מעוגל למעלה
+// ל-15 דקות, בתוך הטווח PICKUP_TIME_MIN–PICKUP_TIME_MAX.
+function getEarliestPickupTime() {
+  const [h, m] = new Date()
+    .toLocaleTimeString("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .split(":")
+    .map(Number);
+  const rounded = Math.ceil((h * 60 + m) / 15) * 15;
+  const now = `${String(Math.floor(rounded / 60)).padStart(2, "0")}:${String(rounded % 60).padStart(2, "0")}`;
+  if (now < PICKUP_TIME_MIN) return PICKUP_TIME_MIN;
+  if (now > PICKUP_TIME_MAX) return PICKUP_TIME_MAX;
+  return now;
+}
+
 const REVIEW_DISMISS_STORAGE_KEY = "ft_dismissed_review_order_id";
 
 function getDismissedReviewOrderId() {
@@ -847,6 +861,7 @@ export default function CustomerScreen({
   const [certLightbox, setCertLightbox] = useState(null);
   const [deliveryTime, setDeliveryTime] = useState(null);
   const [pickupTime, setPickupTime] = useState(DEFAULT_PICKUP_TIME);
+  const earliestPickupTime = getEarliestPickupTime();
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
@@ -1610,7 +1625,12 @@ export default function CustomerScreen({
         deliveryAddress,
         deliveryCity,
         deliveryPhone,
-        pickupTime: orderType === "pickup" ? pickupTime || DEFAULT_PICKUP_TIME : null,
+        pickupTime:
+          orderType === "pickup"
+            ? pickupTime && pickupTime >= earliestPickupTime
+              ? pickupTime
+              : earliestPickupTime
+            : null,
       });
       setShowConfirm(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2317,12 +2337,12 @@ export default function CustomerScreen({
                   {orderType === "pickup" && (
                     <div style={{ padding: "14px 16px", background: "#f0fdf4", textAlign: "center" }}>
                       <div style={{ fontWeight: 800, color: THEME.accentDeep, fontSize: 14, marginBottom: 10 }}>
-                        באיזו שעה תרצה לאסוף? ({PICKUP_TIME_MIN}–{PICKUP_TIME_MAX})
+                        באיזו שעה תרצה לאסוף? ({earliestPickupTime}–{PICKUP_TIME_MAX})
                       </div>
                       <TimeWheelPicker
                         value={pickupTime || DEFAULT_PICKUP_TIME}
                         onChange={setPickupTime}
-                        minTime={PICKUP_TIME_MIN}
+                        minTime={earliestPickupTime}
                         maxTime={PICKUP_TIME_MAX}
                         stepMinutes={15}
                       />
