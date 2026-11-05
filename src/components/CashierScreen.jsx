@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   LogoHeader,
   MenuVisual,
-  ItemModImages,
   SectionTitle,
 } from "./uiHelpers.jsx";
 import {
@@ -13,6 +12,24 @@ import {
   statusPill,
 } from "./uiHelpersUtils.jsx";
 import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
+import { DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
+
+const drinkLabelByKey = Object.fromEntries(
+  [...DRINK_OPTIONS, ...EXTRA_DRINK_OPTIONS].map((d) => [d.key, d.label])
+);
+
+function ItemDetailsLine({ label, mods, showToppings, drink }) {
+  const toppings = modsKeysToDisplayLabels(mods);
+  const parts = [];
+  if (showToppings) parts.push(toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות");
+  if (drink) parts.push(`🥤 ${drink}`);
+  if (!label && parts.length === 0) return null;
+  return (
+    <div style={{ fontSize: "13px", color: "#334155", marginTop: "2px" }}>
+      {label && <span style={{ fontWeight: 800 }}>{label}:</span>} {parts.join(" · ")}
+    </div>
+  );
+}
 
 const menuPartsById = Object.fromEntries(menu.map((m) => [m.id, m.parts || []]));
 
@@ -200,17 +217,23 @@ export default function CashierScreen({
                       <div style={{ fontWeight: 800, fontSize: "14px", color: "#0f172a" }}>
                         {item.name}{item.qty && item.qty > 1 ? ` ×${item.qty}` : ""}
                       </div>
-                      <ItemModImages mods={item.mods} size={60} />
-                      {Array.isArray(item.familyMeals) && item.familyMeals.map((meal, mealIdx) => {
-                        const toppings = modsKeysToDisplayLabels(meal?.mods);
-                        return (
-                          <div key={mealIdx} style={{ fontSize: "13px", color: "#334155", marginTop: "2px" }}>
-                            <span style={{ fontWeight: 800 }}>מנה {meal?.mealNumber || mealIdx + 1}:</span>{" "}
-                            {toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות"}
-                            {meal?.drinkLabel ? ` · 🥤 ${meal.drinkLabel}` : ""}
-                          </div>
-                        );
-                      })}
+                      {Array.isArray(item.familyMeals) ? (
+                        item.familyMeals.map((meal, mealIdx) => (
+                          <ItemDetailsLine
+                            key={mealIdx}
+                            label={`מנה ${meal?.mealNumber || mealIdx + 1}`}
+                            mods={meal?.mods}
+                            showToppings
+                            drink={meal?.drinkLabel || drinkLabelByKey[meal?.drinkKey]}
+                          />
+                        ))
+                      ) : (
+                        <ItemDetailsLine
+                          mods={item.mods}
+                          showToppings={!!item.allowsToppings || modsKeysToDisplayLabels(item.mods).length > 0}
+                          drink={item.drinkLabel || drinkLabelByKey[item.drinkKey] || drinkLabelByKey[item.drinkType]}
+                        />
+                      )}
                     </div>
                   </div>
                 ))}
