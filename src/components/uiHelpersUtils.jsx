@@ -114,20 +114,8 @@ export const menu = [
     parts: [
       {
         type: "image",
-        src: "https://images.unsplash.com/photo-1550317138-10000687a72b?auto=format&fit=crop&w=900&q=80",
-        alt: "המבורגר",
-      },
-      { type: "plus" },
-      {
-        type: "image",
-        src: "/chips.jpeg",
-        alt: "צ'יפס",
-      },
-      { type: "plus" },
-      {
-        type: "image",
-        src: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=900&q=80",
-        alt: "פחית שתיה",
+        src: "/Combo burger.png",
+        alt: "מבצע משפחתי - x4 יאגנוב המבורגר",
       },
     ],
   },
