@@ -17,7 +17,7 @@ async function startCustomerOrder(page, customerName) {
 }
 
 async function addBurgerWithToppings(page, toppings) {
-  const card = menuCard(page, "₪32");
+  const card = menuCard(page, "₪35");
   for (const topping of toppings) {
     await card.getByText(topping, { exact: true }).click();
   }
@@ -89,10 +89,10 @@ test("delivery order shows up on the delivery screen and can be dispatched", asy
   await addBurgerWithToppings(customer, ["עגבניה"]);
   await customer.getByRole("button", { name: "המשך לביצוע הזמנה" }).click();
   await customer.getByRole("button", { name: "🛵 משלוח" }).click();
-  await customer.getByRole("button", { name: "20:00", exact: true }).click();
+  await customer.getByRole("button", { name: /20:00/ }).click();
   await customer.getByPlaceholder("רחוב ומספר בית").fill("הגפן 7");
-  await customer.getByRole("button", { name: "אליאב", exact: true }).click();
-  await customer.getByPlaceholder("מספר טלפון").fill("0501234567");
+  await customer.getByRole("button", { name: /אליאב/ }).click();
+  await customer.getByPlaceholder("לדוגמה 050-1234567").fill("0501234567");
   await customer.getByRole("button", { name: "מזומן" }).click();
   await customer.getByRole("button", { name: "שלח לקופה" }).click();
   await expect(customer.getByRole("button", { name: "שלח לקופה" })).toBeHidden();
