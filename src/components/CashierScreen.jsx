@@ -12,6 +12,7 @@ import {
   statusLabel,
   statusPill,
 } from "./uiHelpersUtils.jsx";
+import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
 
 const menuPartsById = Object.fromEntries(menu.map((m) => [m.id, m.parts || []]));
 
@@ -200,6 +201,16 @@ export default function CashierScreen({
                         {item.name}{item.qty && item.qty > 1 ? ` ×${item.qty}` : ""}
                       </div>
                       <ItemModImages mods={item.mods} size={60} />
+                      {Array.isArray(item.familyMeals) && item.familyMeals.map((meal, mealIdx) => {
+                        const toppings = modsKeysToDisplayLabels(meal?.mods);
+                        return (
+                          <div key={mealIdx} style={{ fontSize: "13px", color: "#334155", marginTop: "2px" }}>
+                            <span style={{ fontWeight: 800 }}>מנה {meal?.mealNumber || mealIdx + 1}:</span>{" "}
+                            {toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות"}
+                            {meal?.drinkLabel ? ` · 🥤 ${meal.drinkLabel}` : ""}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

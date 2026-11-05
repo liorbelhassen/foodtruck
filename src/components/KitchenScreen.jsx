@@ -10,10 +10,30 @@ import {
   screenCardStyle,
 } from "./uiHelpersUtils.jsx";
 import { DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
+import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
 import { toMillis } from "../utils/timeUtils.js";
 
 const ALL_DRINKS = [...DRINK_OPTIONS, ...EXTRA_DRINK_OPTIONS];
 const drinkLabelMap = Object.fromEntries(ALL_DRINKS.map((d) => [d.key, d.label]));
+
+function FamilyMealsLines({ item }) {
+  if (!Array.isArray(item?.familyMeals) || item.familyMeals.length === 0) return null;
+  return (
+    <div style={{ display: "grid", gap: 2, marginTop: 2, paddingRight: 8, borderRight: "2px solid #e5e7eb" }}>
+      {item.familyMeals.map((meal, idx) => {
+        const toppings = modsKeysToDisplayLabels(meal?.mods);
+        const drink = meal?.drinkLabel || drinkLabelMap[meal?.drinkKey];
+        return (
+          <div key={idx} style={{ fontSize: 12, lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 800, color: "#111827" }}>מנה {meal?.mealNumber || idx + 1}:</span>{" "}
+            <span style={{ color: "#059669" }}>{toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות"}</span>
+            {drink && <span style={{ color: "#2563eb", marginRight: 6 }}>🥤 {drink}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function displayCustomerName(name) {
   return (name || "").trim() || "לקוח";
@@ -448,6 +468,7 @@ export default function KitchenScreen({
                           +{getIncludedToppings(i).join(", ")}
                         </span>
                       )}
+                      <FamilyMealsLines item={i} />
                     </div>
                   ))}
                 </div>
@@ -560,6 +581,7 @@ export default function KitchenScreen({
                             +{getIncludedToppings(i).join(", ")}
                           </span>
                         )}
+                        <FamilyMealsLines item={i} />
                       </div>
                     ))}
                   </div>
