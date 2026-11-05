@@ -146,12 +146,15 @@ export default function App() {
     }
   }, [authReady, user]);
 
-  const loggedVisitUidRef = useRef(null);
   useEffect(() => {
-    if (!user?.uid) return;
-    if (loggedVisitUidRef.current === user.uid) return;
-    loggedVisitUidRef.current = user.uid;
-    logSiteVisit(user.uid, !!user.isAnonymous).catch(console.error);
+    if (!user?.uid) return undefined;
+    const logVisit = () => logSiteVisit(user.uid, !!user.isAnonymous).catch(console.error);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") logVisit();
+    };
+    logVisit();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [user?.uid, user?.isAnonymous]);
 
   useEffect(() => {
