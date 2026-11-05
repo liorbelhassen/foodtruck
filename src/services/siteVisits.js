@@ -31,11 +31,16 @@ function getIsraelDateKey(date = new Date()) {
 // כתיבה חוזרת של אותו uid באותו יום פשוט מעדכנת (merge) את אותה רשומה -
 // כך שספירת המסמכים בטווח תאריכים = מספר המבקרים הייחודיים לכל יום, בלי
 // לספור כניסות חוזרות של אותו אדם באותו יום.
+let lastLoggedVisitKey = null;
+
 export async function logSiteVisit(uid, isAnonymous = true) {
   if (!uid) return;
 
   const dateKey = getIsraelDateKey();
-  const visitRef = doc(db, "siteVisits", `${uid}_${dateKey}`);
+  const visitKey = `${uid}_${dateKey}`;
+  if (lastLoggedVisitKey === visitKey) return;
+  lastLoggedVisitKey = visitKey;
+  const visitRef = doc(db, "siteVisits", visitKey);
 
   await setDoc(
     visitRef,
