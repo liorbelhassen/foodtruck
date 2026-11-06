@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import {
-  LogoHeader,
-  MenuVisual,
-  SectionTitle,
-} from "./uiHelpers.jsx";
 import {
   screenCardStyle,
   statusLabel,
@@ -17,28 +12,21 @@ import {
 } from "./uiHelpersUtils.jsx";
 import {
   ALL_TOPPINGS,
-  CARD_BG,
   DRINK_OPTIONS,
   EXTRA_DRINK_OPTIONS,
   THEME,
-  baseCenter,
-  priceStyle,
-  titleStyle,
   DELIVERY_FEES_BY_CITY,
   drinkStockKey,
   menuStockKey,
 } from "./customer/customerConstants.js";
 import {
-  cardStyle,
   getDisplayItemName,
   isStandaloneDrinkItem,
   itemHasDrinkChoice,
   modsKeysToDisplayLabels,
-  modsToLabel,
-  panelStyle,
   replaceDrinkInName,
 } from "./customer/customerHelpers.js";
-import { DrinkChip, PaymentChoiceButton, QtyButton, ToppingChip } from "./customer/customerAtoms.jsx";
+import { PaymentChoiceButton } from "./customer/customerAtoms.jsx";
 import { TimeWheelPicker } from "./customer/TimeWheelPicker.jsx";
 
 const PICKUP_TIME_MIN = "18:30";
@@ -107,33 +95,6 @@ function persistDismissedStatusKey(key) {
   }
 }
 
-function panelHeader(title, hint, action = null) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 10,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ fontSize: 15, fontWeight: 900, color: THEME.text }}>{title}</div>
-      {action ||
-        (hint ? (
-          <div style={{ fontSize: 12, color: THEME.textMuted, fontWeight: 700 }}>
-            {hint}
-          </div>
-        ) : null)}
-    </div>
-  );
-}
-
-function isGuidedComboDrinkItem(item) {
-  const label = getDisplayItemName(String(item?.name || ""));
-  return label.includes("יאגנוב נקניקיה") || label.includes("יאגנוב המבורגר");
-}
-
 function isFamilyDealItem(item) {
   return String(item?.name || "").includes("מבצע משפחתי - x4 יאגנוב המבורגר");
 }
@@ -152,12 +113,6 @@ function createInitialFamilyMealsConfig() {
     mods: [],
     drinkKey: null,
   }));
-}
-
-function formatFamilyMealMods(mods) {
-  const labels = modsKeysToDisplayLabels(mods);
-  if (!labels.length) return "ללא שינויים";
-  return labels.join(", ");
 }
 
 const READY_VIBRATION_PATTERN = [300, 100, 300];
@@ -188,642 +143,296 @@ function formatReviewDate(value) {
   return "";
 }
 
-const SOLD_OUT_BADGE_STYLE = {
-  color: "#b91c1c",
-  background: "#fef2f2",
-  border: "1px solid #fca5a5",
-  borderRadius: 999,
-  padding: "2px 10px",
-  fontSize: 12,
-  fontWeight: 900,
+const KIOSK = {
+  bg: "#fbf7f1",
+  ink: "#2b2118",
+  muted: "#8a7b6c",
+  accent: "#e2552a",
+  accentSoft: "#fdeee6",
+  accentInk: "#c2410c",
+  line: "#ecdfd0",
+  soft: "#f4ece2",
+  imgBg: "#f6efe6",
 };
 
-function MenuItemCard({
-  item,
-  soldOut = {},
-  qty,
-  currentMods,
-  currentDrink,
-  ratingStats,
-  onOpenReviews,
-  showInlineDrinkPicker,
-  drinkPickerRef,
-  isMobile,
-  onToggleMod,
-  onSelectStandaloneDrink,
-  onChooseMealDrink,
-  onCloseInlineDrinkPicker,
-  onAdd,
-  onRemove,
-}) {
-  const standaloneDrink = isStandaloneDrinkItem(item);
-  const familyDeal = isFamilyDealItem(item);
-  const drinkOptions = getDrinkOptionsForItem(item);
-  const itemSoldOut = soldOut[menuStockKey(item.id)] === true;
+const KIOSK_CATEGORIES = [
+  { key: "main", label: "מנות עיקריות", icon: "🍔" },
+  { key: "drinks", label: "שתיה", icon: "🥤" },
+  { key: "sides", label: "תוספות", icon: "🍟" },
+];
 
-  if (standaloneDrink) {
-    return (
+function kioskCategoryOf(item) {
+  if (isStandaloneDrinkItem(item)) return "drinks";
+  if (item.allowsToppings || itemHasDrinkChoice(item) || isFamilyDealItem(item)) return "main";
+  return "sides";
+}
+
+function splitKioskTitle(name) {
+  const display = getDisplayItemName(name);
+  if (display.includes(" - ")) {
+    const [title, ...rest] = display.split(" - ");
+    return { title, sub: rest.join(" - ") };
+  }
+  const plusIdx = display.indexOf(" + ");
+  if (plusIdx > 0) return { title: display.slice(0, plusIdx), sub: display.slice(plusIdx + 1) };
+  return { title: display, sub: "" };
+}
+
+function menuItemImage(itemId) {
+  const item = menu.find((m) => m.id === itemId);
+  return item?.parts?.find((p) => p.type === "image")?.src || "";
+}
+
+function cartGroupKey(item) {
+  const rawName = typeof item?.name === "string" ? item.name.trim() : "";
+  const mods = Array.isArray(item?.mods) ? item.mods : [];
+  return `${rawName || "פריט לא ידוע"}__${mods.slice().sort().join(",")}`;
+}
+
+function kioskMealSummary(mods, drinkLabel) {
+  const labels = modsKeysToDisplayLabels(mods);
+  const parts = [labels.length ? `+${labels.join(", ")}` : "ללא תוספות"];
+  if (drinkLabel) parts.push(`🥤 ${drinkLabel}`);
+  return parts.join(" · ");
+}
+
+const kioskSheetTitleStyle = { fontWeight: 900, fontSize: 15, color: KIOSK.ink };
+const kioskChoiceGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(78px, 1fr))",
+  gap: 8,
+};
+const kioskSummaryLineStyle = {
+  fontSize: 13.5,
+  fontWeight: 700,
+  color: KIOSK.muted,
+  background: KIOSK.soft,
+  padding: "8px 10px",
+  borderRadius: 10,
+};
+const kioskCloseButtonStyle = {
+  width: 36,
+  height: 36,
+  borderRadius: "50%",
+  border: "none",
+  background: KIOSK.soft,
+  color: KIOSK.ink,
+  cursor: "pointer",
+  fontSize: 15,
+  flexShrink: 0,
+};
+
+function kioskCtaStyle(enabled) {
+  return {
+    width: "100%",
+    padding: "15px",
+    borderRadius: 16,
+    border: "none",
+    background: KIOSK.accent,
+    color: "white",
+    fontWeight: 900,
+    fontSize: 17,
+    fontFamily: "inherit",
+    cursor: enabled ? "pointer" : "not-allowed",
+    opacity: enabled ? 1 : 0.45,
+    boxShadow: enabled ? "0 8px 20px rgba(226,85,42,0.25)" : "none",
+  };
+}
+
+function KioskSheet({ isMobile, onClose, children }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        zIndex: 24,
+        display: "flex",
+        alignItems: isMobile ? "flex-end" : "center",
+        justifyContent: "center",
+        padding: isMobile ? 0 : 16,
+        direction: "rtl",
+      }}
+    >
       <div
+        role="dialog"
+        onClick={(e) => e.stopPropagation()}
         style={{
-          ...cardStyle(),
-          padding: isMobile ? 12 : 14,
+          width: "100%",
+          maxWidth: 620,
+          maxHeight: isMobile ? "92dvh" : "90vh",
+          overflowY: "auto",
+          background: "white",
+          borderRadius: isMobile ? "24px 24px 0 0" : 24,
+          padding: 16,
+          boxSizing: "border-box",
           display: "grid",
           gap: 10,
-          background: CARD_BG,
-          border: `1px solid ${THEME.border}`,
+          textAlign: "right",
+          color: KIOSK.ink,
         }}
       >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 118px",
-            gap: 12,
-            alignItems: "start",
-          }}
-        >
-          <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "grid", gap: 3 }}>
-                <div style={titleStyle}>שתיה</div>
-                {ratingStats?.count > 0 && (
-                  <div style={{ fontSize: 12, fontWeight: 800, color: THEME.textMuted, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ color: "#f59e0b", letterSpacing: 0.5 }}>
-                      {starsVisualFromFloat(ratingStats.avg)}
-                    </span>
-                    <span>{ratingStats.avg.toFixed(1)}</span>
-                    <button
-                      onClick={() => onOpenReviews(item)}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        color: "#2563eb",
-                        cursor: "pointer",
-                        fontWeight: 800,
-                        padding: 0,
-                        fontSize: 12,
-                      }}
-                      aria-label={`הצג ביקורות עבור ${getDisplayItemName(item.name)}`}
-                    >
-                      ({ratingStats.count})
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div style={priceStyle}>
-                {itemSoldOut && <span style={SOLD_OUT_BADGE_STYLE}>חסר במלאי</span>} ₪{item.price}
-              </div>
-            </div>
-
-            <div style={panelStyle()}>
-              {panelHeader("בחר שתיה", "")}
-              <div
-                style={{
-                  display: "grid",
-                  width: "100%",
-                  gridTemplateColumns: "1fr",
-                  gap: 6,
-                  alignItems: "stretch",
-                }}
-              >
-                {drinkOptions.map((drink) => (
-                  <DrinkChip
-                    key={`${item.id}-${drink.key}`}
-                    imageSrc={drink.imageSrc}
-                    label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
-                    active={currentDrink === drink.key}
-                    disabled={soldOut[drinkStockKey(drink.key)] === true}
-                    onClick={() => onSelectStandaloneDrink(item.id, drink.key)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-            <div
-              style={{
-                color: THEME.textSoft,
-                fontWeight: 800,
-                fontSize: 14,
-                background: "#ffffff",
-                borderRadius: 14,
-                padding: "8px 10px",
-                border: `1px solid ${THEME.borderSoft}`,
-                textAlign: "center",
-              }}
-            >
-              כמות בעגלה: {qty}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: isMobile ? "space-between" : "center",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <QtyButton onClick={onAdd} filled disabled={itemSoldOut}>
-                +
-              </QtyButton>
-              <QtyButton onClick={onRemove}>-</QtyButton>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        ...cardStyle(),
-        padding: isMobile ? 12 : 14,
-        display: "grid",
-        gap: 10,
-        background: CARD_BG,
-        border: `1px solid ${THEME.border}`,
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isMobile
-            ? "92px minmax(0, 1fr)"
-            : "118px minmax(0, 1.15fr) minmax(210px, 0.9fr)",
-          gap: 12,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-          <div
-            style={{
-              color: THEME.textSoft,
-              fontWeight: 800,
-              fontSize: 14,
-              background: "#ffffff",
-              borderRadius: 14,
-              padding: "8px 10px",
-              border: `1px solid ${THEME.borderSoft}`,
-              textAlign: "center",
-            }}
-          >
-            כמות בעגלה: {qty}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: isMobile ? "column" : "row",
-              justifyContent: "center",
-              gap: 8,
-              alignItems: "center",
-            }}
-          >
-            <QtyButton onClick={onAdd} filled disabled={itemSoldOut}>
-              +
-            </QtyButton>
-            <QtyButton onClick={onRemove}>-</QtyButton>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-          <div style={{ textAlign: "center", display: "grid", gap: 4 }}>
-            <div
-              style={{
-                ...titleStyle,
-                fontSize: isMobile ? 19 : 22,
-                lineHeight: 1.2,
-              }}
-            >
-              {getDisplayItemName(item.name)}
-            </div>
-            {ratingStats?.count > 0 && (
-              <div style={{ fontSize: 12, fontWeight: 800, color: THEME.textMuted, display: "flex", gap: 4, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
-                <span style={{ color: "#f59e0b", letterSpacing: 0.5 }}>
-                  {starsVisualFromFloat(ratingStats.avg)}
-                </span>
-                <span>{ratingStats.avg.toFixed(1)}</span>
-                <button
-                  onClick={() => onOpenReviews(item)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "#2563eb",
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    padding: 0,
-                    fontSize: 12,
-                  }}
-                  aria-label={`הצג ביקורות עבור ${getDisplayItemName(item.name)}`}
-                >
-                  ({ratingStats.count})
-                </button>
-              </div>
-            )}
-            <div style={{ ...priceStyle, fontSize: isMobile ? 20 : 24 }}>
-              {itemSoldOut && <span style={SOLD_OUT_BADGE_STYLE}>חסר במלאי</span>} ₪{item.price}
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderRadius: 20,
-              overflow: "hidden",
-              background: "#fff",
-              border: `1px solid ${THEME.borderSoft}`,
-              minHeight: isMobile ? 150 : 188,
-              padding: 0,
-              ...baseCenter,
-            }}
-          >
-            <MenuVisual parts={item.parts} />
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gap: 8,
-            minWidth: 0,
-            gridColumn: isMobile ? "1 / -1" : "auto",
-          }}
-        >
-          {item.allowsToppings && !familyDeal && (
-            <div style={{ ...panelStyle(), padding: 8, gap: 6 }}>
-              {panelHeader("תוספות", "לחיצה מוסיפה תוספת")}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
-                {ALL_TOPPINGS.map((ing) => (
-                  <ToppingChip
-                    key={`${item.id}-${ing.key}`}
-                    imageSrc={ing.imageSrc}
-                    label={ing.label}
-                    active={currentMods.includes(ing.key)}
-                    onClick={() => onToggleMod(item.id, ing.key)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showInlineDrinkPicker && !standaloneDrink && (
-            <div ref={drinkPickerRef} style={{ ...panelStyle(), padding: 8, gap: 6 }}>
-              {panelHeader(
-                "בחר שתיה לארוחה",
-                "",
-                <button
-                  onClick={onCloseInlineDrinkPicker}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: THEME.textMuted,
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    fontSize: 13,
-                  }}
-                >
-                  סגור
-                </button>
-              )}
-              <div
-                style={{
-                  display: "grid",
-                  width: "100%",
-                  gridTemplateColumns: "1fr",
-                  gap: 6,
-                  alignItems: "stretch",
-                }}
-              >
-                {DRINK_OPTIONS.map((drink) => (
-                  <DrinkChip
-                    key={`inline-picker-${item.id}-${drink.key}`}
-                    imageSrc={drink.imageSrc}
-                    label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
-                    active={false}
-                    disabled={soldOut[drinkStockKey(drink.key)] === true}
-                    onClick={() => onChooseMealDrink(item, drink.key)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OrderSidebar({
-  grouped,
-  total,
-  clearCart,
-  setShowConfirm,
-  isMobile,
-}) {
-  return (
-    <div
-      style={{
-        ...cardStyle(),
-        padding: 16,
-        position: isMobile ? "fixed" : "sticky",
-        top: isMobile ? "auto" : 18,
-        bottom: isMobile ? 12 : "auto",
-        right: isMobile ? 10 : "auto",
-        left: isMobile ? 10 : "auto",
-        zIndex: isMobile ? 16 : "auto",
-        width: isMobile ? "auto" : undefined,
-        maxHeight: isMobile ? "min(34vh, 320px)" : undefined,
-        display: isMobile ? "flex" : undefined,
-        flexDirection: isMobile ? "column" : undefined,
-        background:
-          "linear-gradient(180deg, rgba(240,253,250,0.96) 0%, rgba(255,255,255,0.98) 100%)",
-      }}
-    >
-      <div
-        style={{
-          fontWeight: 900,
-          fontSize: 19,
-          marginBottom: 12,
-          color: THEME.text,
-        }}
-      >
-        ההזמנה שלך
-      </div>
-
-      <div
-        style={{
-          maxHeight: isMobile ? "calc(34vh - 158px)" : 360,
-          overflow: "auto",
-          marginBottom: 12,
-          paddingLeft: 4,
-        }}
-      >
-        {grouped.length === 0 ? (
-          <div style={{ color: THEME.textMuted }}>עדיין לא נבחרו פריטים</div>
-        ) : (
-          grouped.map(([key, item]) => (
-            <div
-              key={key}
-              style={{
-                display: "grid",
-                gap: 4,
-                marginBottom: 10,
-                color: "#1f2937",
-                fontSize: 13,
-                paddingBottom: 8,
-                borderBottom: "1px solid #f1f5f9",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
-                <span>
-                  {item.qty}x {item.name}
-                </span>
-                <span style={{ fontWeight: 800 }}>₪{item.qty * item.price}</span>
-              </div>
-              {item.allowsToppings && (
-                <div style={{ color: THEME.textMuted }}>תוספות: {modsToLabel(item)}</div>
-              )}
-              {Array.isArray(item.familyMeals) && item.familyMeals.length === 4 && (
-                <div style={{ display: "grid", gap: 3, color: THEME.textMuted }}>
-                  {item.familyMeals.map((meal) => (
-                    <div key={`${key}-meal-${meal.mealNumber}`} style={{ fontSize: 12 }}>
-                      מנה {meal.mealNumber}: {formatFamilyMealMods(meal.mods)}, שתיה: {meal.drinkLabel || "לא נבחרה"}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <div
-        style={{
-          fontWeight: 900,
-          fontSize: 28,
-          marginBottom: 12,
-          color: THEME.text,
-        }}
-      >
-        ₪{total}
-      </div>
-
-      <div style={{ display: "grid", gap: 8 }}>
-        <button
-          onClick={clearCart}
-          style={{
-            padding: "12px",
-            borderRadius: 18,
-            border: `1px solid ${THEME.border}`,
-            background: "white",
-            cursor: "pointer",
-            fontWeight: 800,
-          }}
-        >
-          לנקות הכל
-        </button>
-
-        <button
-          disabled={total === 0}
-          onClick={() => setShowConfirm(true)}
-          style={{
-            padding: "13px",
-            borderRadius: 18,
-            border: "none",
-            background:
-              total > 0
-                ? `linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.warm} 100%)`
-                : "#9ca3af",
-            color: "white",
-            cursor: total > 0 ? "pointer" : "not-allowed",
-            fontWeight: 800,
-            boxShadow: total > 0 ? "0 14px 30px rgba(15,118,110,0.20)" : "none",
-          }}
-        >
-          המשך לביצוע הזמנה
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function MobileSummaryDrawer({
-  grouped,
-  total,
-  clearCart,
-  setShowConfirm,
-  isOpen,
-  setIsOpen,
-}) {
-  if (typeof document === "undefined") return null;
-
-  const itemCount = grouped.reduce((s, [, item]) => s + item.qty, 0);
-
-  return createPortal(
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40, direction: "rtl", pointerEvents: isOpen ? "auto" : "none" }}>
-      {/* backdrop */}
-      {isOpen && (
-        <div
-          onClick={() => setIsOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: -1 }}
-        />
-      )}
-
-      {/* sheet */}
-      <div
-        style={{
-          background: "white",
-          borderRadius: "20px 20px 0 0",
-          boxShadow: "0 -8px 32px rgba(15,23,42,0.16)",
-          transform: isOpen ? "translateY(0)" : "translateY(calc(100% - 64px))",
-          transition: "transform 260ms ease",
-          willChange: "transform",
-          maxHeight: "80vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* handle + collapsed bar */}
-        <button
-          onClick={() => setIsOpen((prev) => !prev)}
-          style={{
-            width: "100%",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: "10px 16px 8px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            pointerEvents: "auto",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 20 }}>🛒</span>
-            {itemCount > 0 && (
-              <span style={{
-                background: THEME.accent,
-                color: "white",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 900,
-                padding: "1px 8px",
-              }}>
-                {itemCount}
-              </span>
-            )}
-            <span style={{ fontWeight: 900, fontSize: 15, color: THEME.text }}>ההזמנה שלך</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontWeight: 900, fontSize: 18, color: THEME.text }}>₪{total}</span>
-            <span style={{ fontSize: 12, color: THEME.textMuted }}>{isOpen ? "▼" : "▲"}</span>
-          </div>
-        </button>
-
-        {/* expanded content */}
-        <div style={{ overflowY: "auto", padding: "0 16px", flex: 1, pointerEvents: isOpen ? "auto" : "none" }}>
-          {grouped.length === 0 ? (
-            <div style={{ color: THEME.textMuted, fontSize: 14, padding: "8px 0 12px" }}>עדיין לא נבחרו פריטים</div>
-          ) : (
-            grouped.map(([key, item]) => (
-              <div
-                key={key}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 12,
-                  paddingBottom: 10,
-                  marginBottom: 10,
-                  borderBottom: `1px solid ${THEME.borderSoft}`,
-                  fontSize: 14,
-                  color: "#1f2937",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700 }}>{item.qty}× {item.name}</div>
-                  {item.allowsToppings && modsToLabel(item) !== "ללא תוספות" && (
-                    <div style={{ color: THEME.textMuted, fontSize: 12, marginTop: 2 }}>
-                      תוספות: {modsToLabel(item)}
-                    </div>
-                  )}
-                  {Array.isArray(item.familyMeals) && item.familyMeals.length === 4 && (
-                    <div style={{ color: THEME.textMuted, fontSize: 12, marginTop: 2 }}>
-                      {item.familyMeals.map((meal) => (
-                        <div key={meal.mealNumber}>מנה {meal.mealNumber}: {formatFamilyMealMods(meal.mods)}, {meal.drinkLabel || "ללא שתיה"}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <span style={{ fontWeight: 800, flexShrink: 0 }}>₪{item.qty * item.price}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* total + buttons */}
-        <div style={{ padding: "10px 16px 20px", borderTop: `1px solid ${THEME.borderSoft}`, flexShrink: 0, pointerEvents: isOpen ? "auto" : "none" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontWeight: 900, fontSize: 18, color: THEME.text }}>סה"כ</span>
-            <span style={{ fontWeight: 900, fontSize: 22, color: THEME.text }}>₪{total}</span>
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            <button
-              onClick={clearCart}
-              style={{
-                padding: "11px",
-                borderRadius: 14,
-                border: `1px solid ${THEME.border}`,
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 800,
-                fontSize: 14,
-              }}
-            >
-              לנקות הכל
-            </button>
-            <button
-              disabled={total === 0}
-              onClick={() => { setShowConfirm(true); setIsOpen(false); }}
-              style={{
-                padding: "14px",
-                borderRadius: 14,
-                border: "none",
-                background: total > 0
-                  ? `linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.warm} 100%)`
-                  : "#9ca3af",
-                color: "white",
-                cursor: total > 0 ? "pointer" : "not-allowed",
-                fontWeight: 900,
-                fontSize: 15,
-                boxShadow: total > 0 ? "0 8px 20px rgba(15,118,110,0.25)" : "none",
-              }}
-            >
-              המשך לביצוע הזמנה
-            </button>
-          </div>
-        </div>
+        {children}
       </div>
     </div>,
     document.body
   );
 }
 
+function KioskSheetHeader({ imageSrc, title, subtitle, onClose }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      {imageSrc && (
+        <img
+          src={imageSrc}
+          alt=""
+          style={{ width: 84, height: 60, objectFit: "cover", borderRadius: 12, flexShrink: 0 }}
+        />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
+        <div style={{ color: KIOSK.muted, fontWeight: 700 }}>{subtitle}</div>
+      </div>
+      <button type="button" onClick={onClose} aria-label="סגור" style={kioskCloseButtonStyle}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function KioskChoice({ label, imageSrc, active, disabled = false, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      style={{
+        border: `2px solid ${active ? KIOSK.accent : KIOSK.line}`,
+        background: active ? KIOSK.accentSoft : "white",
+        color: active ? KIOSK.accentInk : KIOSK.ink,
+        borderRadius: 14,
+        padding: 6,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 3,
+        fontWeight: 800,
+        fontSize: 13,
+        fontFamily: "inherit",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <img src={imageSrc} alt="" style={{ width: 44, height: 44, objectFit: "contain" }} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function KioskTile({ tile, isMobile, onSelect, onOpenReviews }) {
+  const { title, sub, price, imageSrc, contain, soldOut: tileSoldOut, qty, ratingStats, badge } = tile;
+  const badgeText = tileSoldOut ? "חסר במלאי" : qty > 0 ? `✓ ${qty} בהזמנה` : badge;
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: "white",
+        borderRadius: 16,
+        boxShadow: "0 1px 4px rgba(60,30,0,0.08)",
+        border: `2px solid ${qty > 0 && !tileSoldOut ? KIOSK.accent : "transparent"}`,
+        opacity: tileSoldOut ? 0.55 : 1,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {badgeText && (
+        <span
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            zIndex: 1,
+            background: tileSoldOut ? "#7f1d1d" : KIOSK.accent,
+            color: "white",
+            fontSize: 11.5,
+            fontWeight: 900,
+            padding: "3px 9px",
+            borderRadius: 999,
+          }}
+        >
+          {badgeText}
+        </span>
+      )}
+      <button
+        type="button"
+        disabled={tileSoldOut}
+        onClick={onSelect}
+        style={{
+          border: "none",
+          background: "none",
+          padding: 10,
+          paddingBottom: ratingStats?.count > 0 ? 2 : 10,
+          textAlign: "right",
+          cursor: tileSoldOut ? "not-allowed" : "pointer",
+          display: "grid",
+          gap: 2,
+          fontFamily: "inherit",
+          color: KIOSK.ink,
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            aspectRatio: "1.5",
+            borderRadius: 10,
+            overflow: "hidden",
+            background: contain ? "white" : KIOSK.imgBg,
+            marginBottom: 6,
+          }}
+        >
+          <img
+            src={imageSrc}
+            alt=""
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: contain ? "contain" : "cover",
+              display: "block",
+            }}
+          />
+        </div>
+        <div style={{ fontWeight: 900, fontSize: isMobile ? 15 : 16, lineHeight: 1.25 }}>{title}</div>
+        {sub && <div style={{ fontSize: 12.5, color: KIOSK.muted, fontWeight: 600 }}>{sub}</div>}
+        <div style={{ fontWeight: 900, fontSize: 19, color: KIOSK.accentInk, marginTop: 4 }}>₪{price}</div>
+      </button>
+      {ratingStats?.count > 0 && (
+        <button
+          type="button"
+          onClick={onOpenReviews}
+          aria-label={`הצג ביקורות עבור ${title}`}
+          style={{
+            border: "none",
+            background: "none",
+            padding: "0 10px 10px",
+            textAlign: "right",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: 12,
+            fontWeight: 800,
+            color: KIOSK.muted,
+          }}
+        >
+          <span style={{ color: "#f59e0b" }}>{starsVisualFromFloat(ratingStats.avg)}</span>{" "}
+          {ratingStats.avg.toFixed(1)} ({ratingStats.count})
+        </button>
+      )}
+    </div>
+  );
+}
 
 const deliveryLabelStyle = {
   fontWeight: 900,
@@ -846,7 +455,6 @@ export default function CustomerScreen({
   menuRatingsByItemId = {},
   menuItemReviewsById = {},
 }) {
-  const [showConfirm, setShowConfirm] = useState(false);
   const [showFamilyConfig, setShowFamilyConfig] = useState(false);
   const [familyConfigError, setFamilyConfigError] = useState("");
   const [familyMealConfigs, setFamilyMealConfigs] = useState(createInitialFamilyMealsConfig);
@@ -874,9 +482,14 @@ export default function CustomerScreen({
     persistDismissedReviewOrderId(orderId);
   };
   const [selectedReviewsItem, setSelectedReviewsItem] = useState(null);
-  const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
-  const [itemMods, setItemMods] = useState({});
-  const [itemDrinks, setItemDrinks] = useState({});
+  const [activeCategory, setActiveCategory] = useState("main");
+  const [panelTab, setPanelTab] = useState("order");
+  const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
+  const [sheetItem, setSheetItem] = useState(null);
+  const [sheetMods, setSheetMods] = useState([]);
+  const [sheetDrink, setSheetDrink] = useState(null);
+  const [activeFamilyMeal, setActiveFamilyMeal] = useState(0);
+  const [kioskHeight, setKioskHeight] = useState(null);
   const [requestedPayment, setRequestedPayment] = useState("cash");
   const [orderType, setOrderType] = useState("pickup");
   const [certLightbox, setCertLightbox] = useState(null);
@@ -886,13 +499,10 @@ export default function CustomerScreen({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
-  const [openInlineDrinkPickerId, setOpenInlineDrinkPickerId] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
-  const modalRef = useRef(null);
-  const qrSectionRef = useRef(null);
-  const inlineDrinkPickerRefs = useRef({});
+  const kioskRef = useRef(null);
   const notifyingReadyOrderIdsRef = useRef(new Set());
   const readyAudioRef = useRef(null);
   const audioUnlockedRef = useRef(false);
@@ -900,10 +510,15 @@ export default function CustomerScreen({
   const isMobile = viewportWidth <= 900;
   const isDesktop = viewportWidth > 900;
   const displayCustomerName = customerName.trim() || "לקוח";
-  const qrOpen = requestedPayment === "bit" || requestedPayment === "paybox";
   const total = cart.reduce((sum, item) => sum + item.price, 0);
   const deliveryFee = orderType === "delivery" ? DELIVERY_FEES_BY_CITY[deliveryCity] || 0 : 0;
   const orderTotal = total + deliveryFee;
+  const deliveryDetailsComplete =
+    orderType === "pickup" ||
+    (Boolean(deliveryCity) &&
+      Boolean(deliveryTime) &&
+      Boolean(deliveryAddress.trim()) &&
+      Boolean(deliveryPhone.trim()));
   const grouped = useMemo(() => groupCart(cart), [cart]);
   const customerStatusModalKey =
     customerOrder?.id && customerOrder?.status
@@ -915,7 +530,7 @@ export default function CustomerScreen({
     !showReadyModal &&
     !showReviewModal &&
     !selectedReviewsItem &&
-    !showConfirm &&
+    !sheetItem &&
     !showFamilyConfig;
   const selectedItemReviews =
     selectedReviewsItem && Array.isArray(menuItemReviewsById[selectedReviewsItem.id])
@@ -1015,144 +630,88 @@ export default function CustomerScreen({
         )
       : null;
 
-  const familyConfigModal =
-    showFamilyConfig && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            onClick={closeFamilyConfig}
+  const activeFamilyMealConfig = familyMealConfigs[activeFamilyMeal] || familyMealConfigs[0];
+  const familyConfigModal = showFamilyConfig ? (
+    <KioskSheet isMobile={isMobile} onClose={closeFamilyConfig}>
+      <KioskSheetHeader
+        imageSrc={menuItemImage(familyDealItem?.id)}
+        title="מבצע משפחתי - x4 יאגנוב המבורגר"
+        subtitle={`בחרו תוספות ושתיה לכל אחת מ-4 המנות · ₪${familyDealItem?.price ?? ""}`}
+        onClose={closeFamilyConfig}
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+        {familyMealConfigs.map((meal, index) => (
+          <button
+            key={`family-meal-tab-${index}`}
+            type="button"
+            onClick={() => setActiveFamilyMeal(index)}
             style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(15,23,42,0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 16,
-              zIndex: 24,
+              padding: "9px 4px",
+              borderRadius: 10,
+              border: "none",
+              background: index === activeFamilyMeal ? KIOSK.accent : KIOSK.soft,
+              color: index === activeFamilyMeal ? "white" : KIOSK.ink,
+              fontWeight: 800,
+              fontFamily: "inherit",
+              cursor: "pointer",
             }}
           >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "100%",
-                maxWidth: 680,
-                maxHeight: "88vh",
-                overflow: "auto",
-                background: "white",
-                borderRadius: 22,
-                border: `1px solid ${THEME.border}`,
-                boxShadow: "0 24px 70px rgba(15,23,42,0.24)",
-                padding: isMobile ? "14px" : "16px",
-                display: "grid",
-                gap: 10,
-                direction: "rtl",
-                textAlign: "right",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: isMobile ? 20 : 22, color: THEME.text }}>
-                מבצע משפחתי - x4 יאגנוב המבורגר
-              </div>
-              <div style={{ color: THEME.textMuted, fontWeight: 700 }}>
-                הגדר תוספות ושתיה לכל אחת מ-4 המנות
-              </div>
+            מנה {index + 1}
+            {meal.drinkKey ? " ✓" : ""}
+          </button>
+        ))}
+      </div>
 
-              <div style={{ display: "grid", gap: 10 }}>
-                {familyMealConfigs.map((meal, index) => (
-                  <div
-                    key={`family-meal-${index}`}
-                    style={{
-                      border: `1px solid ${THEME.borderSoft}`,
-                      background: "#f8fafc",
-                      borderRadius: 16,
-                      padding: 10,
-                      display: "grid",
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ fontWeight: 900, color: THEME.text }}>מנה {index + 1}</div>
+      <div style={kioskSheetTitleStyle}>תוספות למנה {activeFamilyMeal + 1}</div>
+      <div style={kioskChoiceGridStyle}>
+        {ALL_TOPPINGS.map((ing) => (
+          <KioskChoice
+            key={`family-${activeFamilyMeal}-${ing.key}`}
+            imageSrc={ing.imageSrc}
+            label={ing.label}
+            active={activeFamilyMealConfig.mods.includes(ing.key)}
+            onClick={() => toggleFamilyMealMod(activeFamilyMeal, ing.key)}
+          />
+        ))}
+      </div>
 
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
-                      {ALL_TOPPINGS.map((ing) => (
-                        <ToppingChip
-                          key={`family-${index}-${ing.key}`}
-                          imageSrc={ing.imageSrc}
-                          label={ing.label}
-                          active={meal.mods.includes(ing.key)}
-                          onClick={() => toggleFamilyMealMod(index, ing.key)}
-                        />
-                      ))}
-                    </div>
+      <div style={kioskSheetTitleStyle}>שתיה למנה {activeFamilyMeal + 1}</div>
+      <div style={kioskChoiceGridStyle}>
+        {DRINK_OPTIONS.map((drink) => {
+          const drinkSoldOut = soldOut[drinkStockKey(drink.key)] === true;
+          return (
+            <KioskChoice
+              key={`family-drink-${activeFamilyMeal}-${drink.key}`}
+              imageSrc={drink.imageSrc}
+              label={drinkSoldOut ? `${drink.label} (חסר)` : drink.label}
+              active={activeFamilyMealConfig.drinkKey === drink.key}
+              disabled={drinkSoldOut}
+              onClick={() => chooseFamilyDrink(drink.key)}
+            />
+          );
+        })}
+      </div>
 
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr",
-                        gap: 6,
-                      }}
-                    >
-                      {DRINK_OPTIONS.map((drink) => (
-                        <DrinkChip
-                          key={`family-drink-${index}-${drink.key}`}
-                          imageSrc={drink.imageSrc}
-                          label={soldOut[drinkStockKey(drink.key)] ? `${drink.label} - חסר במלאי` : drink.label}
-                          active={meal.drinkKey === drink.key}
-                          disabled={soldOut[drinkStockKey(drink.key)] === true}
-                          onClick={() => selectFamilyMealDrink(index, drink.key)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+      <div style={kioskSummaryLineStyle}>
+        מנה {activeFamilyMeal + 1}:{" "}
+        {kioskMealSummary(
+          activeFamilyMealConfig.mods,
+          DRINK_OPTIONS.find((d) => d.key === activeFamilyMealConfig.drinkKey)?.label || "בחרו שתיה"
+        )}
+      </div>
 
-              {familyConfigError && (
-                <div style={{ color: "#b91c1c", fontWeight: 800, textAlign: "center" }}>
-                  {familyConfigError}
-                </div>
-              )}
+      {familyConfigError && (
+        <div style={{ color: "#b91c1c", fontWeight: 800, textAlign: "center" }}>
+          {familyConfigError}
+        </div>
+      )}
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 8,
-                }}
-              >
-                <button
-                  onClick={confirmFamilyConfig}
-                  style={{
-                    padding: "12px",
-                    borderRadius: 16,
-                    border: "none",
-                    background: `linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.warm} 100%)`,
-                    color: "white",
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    fontSize: 15,
-                  }}
-                >
-                  הוסף מבצע לעגלה
-                </button>
-                <button
-                  onClick={closeFamilyConfig}
-                  style={{
-                    padding: "12px",
-                    borderRadius: 16,
-                    border: "1px solid #ccc",
-                    background: "white",
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    fontSize: 15,
-                  }}
-                >
-                  ביטול
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
+      <button type="button" onClick={() => handleConfirmFamily()} style={kioskCtaStyle(true)}>
+        הוספה להזמנה · ₪{familyDealItem?.price ?? ""}
+      </button>
+    </KioskSheet>
+  ) : null;
 
   const reviewStageModal =
     showReviewModal &&
@@ -1428,63 +987,19 @@ export default function CustomerScreen({
     };
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = showConfirm ? "hidden" : "";
-    document.body.style.touchAction = showConfirm ? "none" : "";
-    return () => {
-      document.body.style.overflow = "";
-      document.body.style.touchAction = "";
+  useLayoutEffect(() => {
+    if (!customerConfirmed) return undefined;
+    const measure = () => {
+      const el = kioskRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const below = isMobile ? 26 : 34;
+      setKioskHeight(Math.max(460, Math.floor(window.innerHeight - top - below)));
     };
-  }, [showConfirm]);
-
-  useEffect(() => {
-    if (!showConfirm) return;
-
-    const onKeyDown = (event) => {
-      if (isSubmittingOrder) return;
-      if (event.key === "Escape") {
-        setShowConfirm(false);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showConfirm, isSubmittingOrder]);
-
-  useEffect(() => {
-    if (!showConfirm) return;
-    if (requestedPayment !== "bit" && requestedPayment !== "paybox") return;
-
-    const timer = setTimeout(() => {
-      const modalEl = modalRef.current;
-      const qrEl = qrSectionRef.current;
-      if (!modalEl || !qrEl) return;
-      const qrTop =
-        qrEl.getBoundingClientRect().top - modalEl.getBoundingClientRect().top + modalEl.scrollTop;
-      modalEl.scrollTo({
-        top: Math.max(0, qrTop - (modalEl.clientHeight - qrEl.offsetHeight) / 2),
-        behavior: "smooth",
-      });
-    }, 40);
-
-    return () => clearTimeout(timer);
-  }, [showConfirm, requestedPayment]);
-
-  useEffect(() => {
-    if (!openInlineDrinkPickerId) return;
-
-    const openedItem = menu.find((item) => item.id === openInlineDrinkPickerId);
-    if (!isGuidedComboDrinkItem(openedItem)) return;
-
-    const timer = setTimeout(() => {
-      inlineDrinkPickerRefs.current[openInlineDrinkPickerId]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 40);
-
-    return () => clearTimeout(timer);
-  }, [openInlineDrinkPickerId]);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [customerConfirmed, isMobile]);
 
   useEffect(() => {
     const currentOrderId = customerOrder?.id;
@@ -1665,8 +1180,8 @@ export default function CustomerScreen({
               : earliestPickupTime
             : null,
       });
-      setShowConfirm(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      setPanelTab("order");
+      setIsMobilePanelOpen(false);
     } catch (error) {
       console.error("Order submission failed:", error);
       setSubmitOrderError("שליחת ההזמנה נכשלה. נסה שוב.");
@@ -1705,89 +1220,6 @@ export default function CustomerScreen({
       setIsSubmittingReview(false);
     }
   }
-
-  const getModsForItem = (itemId) => itemMods[itemId] || [];
-  const getDrinkForItem = (itemId) => itemDrinks[itemId] || null;
-
-  const selectDrinkForItem = (itemId, drinkKey) => {
-    setItemDrinks((prev) => ({ ...prev, [itemId]: drinkKey }));
-  };
-
-  const toggleItemMod = (itemId, modKey) => {
-    setItemMods((prev) => {
-      const current = prev[itemId] || [];
-      const next = current.includes(modKey)
-        ? current.filter((x) => x !== modKey)
-        : [...current, modKey];
-
-      setCart((prevCart) => {
-        const lastIdx = prevCart.map((c) => c.id).lastIndexOf(itemId);
-        if (lastIdx === -1) return prevCart;
-        const updated = [...prevCart];
-        updated[lastIdx] = { ...updated[lastIdx], mods: next };
-        return updated;
-      });
-
-      return { ...prev, [itemId]: next };
-    });
-  };
-
-  const resetItemSelections = (itemId) => {
-    setItemMods((prev) => {
-      if (!(itemId in prev)) return prev;
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-
-    setItemDrinks((prev) => {
-      if (!(itemId in prev)) return prev;
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-
-    setOpenInlineDrinkPickerId((prev) => (prev === itemId ? null : prev));
-  };
-
-  const addStandaloneDrinkToCart = (item) => {
-    const selectedDrinkKey = getDrinkForItem(item.id);
-    if (!selectedDrinkKey) {
-      alert("בחר שתיה קודם");
-      return;
-    }
-
-    const selectedDrink = getDrinkOptionsForItem(item).find((d) => d.key === selectedDrinkKey);
-    if (!selectedDrink || soldOut[drinkStockKey(selectedDrink.key)]) return;
-
-    setCart([
-      ...cart,
-      {
-        ...item,
-        name: selectedDrink.label,
-        drinkType: selectedDrink.key,
-        imageSrc: selectedDrink.imageSrc,
-        allowsToppings: false,
-      },
-    ]);
-    resetItemSelections(item.id);
-  };
-
-  const addMealWithDrinkToCart = (item, drinkKey) => {
-    const selectedDrink = DRINK_OPTIONS.find((d) => d.key === drinkKey);
-    if (!selectedDrink || soldOut[drinkStockKey(drinkKey)]) return;
-
-    setCart([
-      ...cart,
-      {
-        ...item,
-        name: replaceDrinkInName(getDisplayItemName(item.name), selectedDrink.label),
-        drinkType: selectedDrink.key,
-        mods: item.allowsToppings ? [...getModsForItem(item.id)] : [],
-      },
-    ]);
-    resetItemSelections(item.id);
-  };
 
   function toggleFamilyMealMod(mealIndex, modKey) {
     setFamilyMealConfigs((prev) =>
@@ -1854,56 +1286,115 @@ export default function CustomerScreen({
     closeFamilyConfig();
   }
 
-  const addToCart = (item) => {
+  const closeItemSheet = () => {
+    setSheetItem(null);
+    setSheetMods([]);
+    setSheetDrink(null);
+  };
+
+  const openMenuItem = (item) => {
     if (soldOut[menuStockKey(item.id)]) return;
 
     if (isFamilyDealItem(item)) {
       setFamilyDealItem(item);
       setFamilyMealConfigs(createInitialFamilyMealsConfig());
       setFamilyConfigError("");
+      setActiveFamilyMeal(0);
       setShowFamilyConfig(true);
       return;
     }
 
-    if (isStandaloneDrinkItem(item)) {
-      addStandaloneDrinkToCart(item);
+    if (item.allowsToppings || itemHasDrinkChoice(item)) {
+      setSheetItem(item);
+      setSheetMods([]);
+      setSheetDrink(null);
       return;
     }
 
-    if (itemHasDrinkChoice(item)) {
-      setOpenInlineDrinkPickerId((prev) => (prev === item.id ? null : item.id));
-      return;
-    }
+    setCart([...cart, { ...item, name: getDisplayItemName(item.name), mods: [] }]);
+  };
 
+  const toggleSheetMod = (modKey) => {
+    setSheetMods((prev) =>
+      prev.includes(modKey) ? prev.filter((key) => key !== modKey) : [...prev, modKey]
+    );
+  };
+
+  const sheetNeedsDrink = !!sheetItem && itemHasDrinkChoice(sheetItem);
+
+  const confirmItemSheet = () => {
+    if (!sheetItem) return;
+    const mods = sheetItem.allowsToppings ? [...sheetMods] : [];
+
+    if (sheetNeedsDrink) {
+      const drink = DRINK_OPTIONS.find((d) => d.key === sheetDrink);
+      if (!drink || soldOut[drinkStockKey(drink.key)]) return;
+      setCart([
+        ...cart,
+        {
+          ...sheetItem,
+          name: replaceDrinkInName(getDisplayItemName(sheetItem.name), drink.label),
+          drinkType: drink.key,
+          mods,
+        },
+      ]);
+    } else {
+      setCart([...cart, { ...sheetItem, name: getDisplayItemName(sheetItem.name), mods }]);
+    }
+    closeItemSheet();
+  };
+
+  const addDrinkToCart = (item, drink) => {
+    if (soldOut[menuStockKey(item.id)] || soldOut[drinkStockKey(drink.key)]) return;
     setCart([
       ...cart,
       {
         ...item,
-        name: getDisplayItemName(item.name),
-        mods: item.allowsToppings ? [...getModsForItem(item.id)] : [],
+        name: drink.label,
+        drinkType: drink.key,
+        imageSrc: drink.imageSrc,
+        allowsToppings: false,
       },
     ]);
-    resetItemSelections(item.id);
   };
 
-  const removeOneFromCart = (itemId) => {
-    const idx = cart.map((c) => c.id).lastIndexOf(itemId);
-    if (idx < 0) return;
+  const isCartItemSoldOut = (item) =>
+    soldOut[menuStockKey(item.id)] === true ||
+    (item.drinkType && soldOut[drinkStockKey(item.drinkType)] === true) ||
+    item.familyMeals?.some((meal) => soldOut[drinkStockKey(meal.drinkKey)] === true) ||
+    false;
 
+  const addOneOfGroup = (groupKey) => {
+    const idx = cart.map(cartGroupKey).lastIndexOf(groupKey);
+    if (idx < 0) return;
+    setCart([...cart, { ...cart[idx] }]);
+  };
+
+  const removeOneOfGroup = (groupKey) => {
+    const idx = cart.map(cartGroupKey).lastIndexOf(groupKey);
+    if (idx < 0) return;
     const next = [...cart];
     next.splice(idx, 1);
     setCart(next);
+  };
 
-    if (!next.some((item) => item.id === itemId)) {
-      resetItemSelections(itemId);
-    }
+  const chooseFamilyDrink = (drinkKey) => {
+    if (soldOut[drinkStockKey(drinkKey)]) return;
+    selectFamilyMealDrink(activeFamilyMeal, drinkKey);
+    const nextEmpty = familyMealConfigs.findIndex(
+      (meal, idx) => idx > activeFamilyMeal && !meal.drinkKey
+    );
+    if (nextEmpty !== -1) setActiveFamilyMeal(nextEmpty);
+  };
+
+  const handleConfirmFamily = () => {
+    const firstMissing = familyMealConfigs.findIndex((meal) => !meal.drinkKey);
+    if (firstMissing !== -1) setActiveFamilyMeal(firstMissing);
+    confirmFamilyConfig();
   };
 
   const clearCart = () => {
     setCart([]);
-    setItemMods({});
-    setItemDrinks({});
-    setOpenInlineDrinkPickerId(null);
   };
 
   const handleNameSubmit = () => {
@@ -1915,20 +1406,134 @@ export default function CustomerScreen({
     setSelectedReviewsItem(item);
   };
 
+  const kioskTiles =
+    activeCategory === "drinks"
+      ? menu.filter(isStandaloneDrinkItem).flatMap((item) =>
+          getDrinkOptionsForItem(item).map((drink) => ({
+            key: `${item.id}-${drink.key}`,
+            item,
+            drink,
+            title: drink.label,
+            sub: isExtraDrinkItem(item) ? "בקבוק קטן" : "פחית",
+            price: item.price,
+            imageSrc: drink.imageSrc,
+            contain: true,
+            soldOut:
+              soldOut[menuStockKey(item.id)] === true || soldOut[drinkStockKey(drink.key)] === true,
+            qty: cart.filter((c) => c.id === item.id && c.drinkType === drink.key).length,
+          }))
+        )
+      : menu
+          .filter((item) => kioskCategoryOf(item) === activeCategory)
+          .map((item) => ({
+            key: String(item.id),
+            item,
+            ...splitKioskTitle(item.name),
+            price: item.price,
+            imageSrc: menuItemImage(item.id),
+            contain: false,
+            soldOut: soldOut[menuStockKey(item.id)] === true,
+            qty: cart.filter((c) => c.id === item.id).length,
+            ratingStats: menuRatingsByItemId[item.id] || null,
+            badge: isFamilyDealItem(item) ? "מבצע" : "",
+          }));
+
+  const effectivePickupTime =
+    pickupTime && pickupTime >= earliestPickupTime ? pickupTime : earliestPickupTime;
+  const paymentLabels = { cash: "מזומן", bit: "ביט", paybox: "PayBox" };
+  const panelTabs = [
+    { key: "order", label: "1. ההזמנה", hint: `${cart.length} פריטים` },
+    {
+      key: "delivery",
+      label: "2. איסוף/משלוח",
+      hint: orderType === "pickup" ? `איסוף ${effectivePickupTime}` : deliveryCity || "משלוח",
+    },
+    { key: "pay", label: "3. תשלום", hint: paymentLabels[requestedPayment] || "לא נבחר" },
+  ];
+  const canSubmitOrder = cart.length > 0 && deliveryDetailsComplete && !isSubmittingOrder;
+
+  const itemSheetModal = sheetItem ? (
+    <KioskSheet isMobile={isMobile} onClose={closeItemSheet}>
+      <KioskSheetHeader
+        imageSrc={menuItemImage(sheetItem.id)}
+        title={getDisplayItemName(sheetItem.name)}
+        subtitle={`₪${sheetItem.price}`}
+        onClose={closeItemSheet}
+      />
+
+      {sheetItem.allowsToppings && (
+        <>
+          <div style={kioskSheetTitleStyle}>תוספות (לחיצה מוסיפה תוספת)</div>
+          <div style={kioskChoiceGridStyle}>
+            {ALL_TOPPINGS.map((ing) => (
+              <KioskChoice
+                key={`sheet-${ing.key}`}
+                imageSrc={ing.imageSrc}
+                label={ing.label}
+                active={sheetMods.includes(ing.key)}
+                onClick={() => toggleSheetMod(ing.key)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {sheetNeedsDrink && (
+        <>
+          <div style={kioskSheetTitleStyle}>שתיה לארוחה</div>
+          <div style={kioskChoiceGridStyle}>
+            {DRINK_OPTIONS.map((drink) => {
+              const drinkSoldOut = soldOut[drinkStockKey(drink.key)] === true;
+              return (
+                <KioskChoice
+                  key={`sheet-drink-${drink.key}`}
+                  imageSrc={drink.imageSrc}
+                  label={drinkSoldOut ? `${drink.label} (חסר)` : drink.label}
+                  active={sheetDrink === drink.key}
+                  disabled={drinkSoldOut}
+                  onClick={() => setSheetDrink(drink.key)}
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <div style={kioskSummaryLineStyle}>
+        {kioskMealSummary(
+          sheetMods,
+          sheetNeedsDrink ? DRINK_OPTIONS.find((d) => d.key === sheetDrink)?.label || "בחרו שתיה" : null
+        )}
+      </div>
+
+      <button
+        type="button"
+        disabled={sheetNeedsDrink && !sheetDrink}
+        onClick={confirmItemSheet}
+        style={kioskCtaStyle(!(sheetNeedsDrink && !sheetDrink))}
+      >
+        {sheetNeedsDrink && !sheetDrink ? "בחרו שתיה כדי להוסיף" : `הוספה להזמנה · ₪${sheetItem.price}`}
+      </button>
+    </KioskSheet>
+  ) : null;
+
   return (
     <div
       style={{
         ...screenCardStyle(),
+        maxWidth: customerConfirmed ? 1280 : 980,
         backgroundImage:
           "linear-gradient(rgba(245,252,250,0.88), rgba(255,255,255,0.92)), url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1600&q=80')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundAttachment: isMobile ? "scroll" : "fixed",
-        minHeight: isDesktop && !customerConfirmed ? "calc(100vh - 120px)" : "100svh",
+        minHeight: customerConfirmed ? undefined : isDesktop ? "calc(100vh - 120px)" : "100svh",
         padding: isMobile
-          ? "12px 10px 14px"
+          ? customerConfirmed
+            ? "6px"
+            : "12px 10px 14px"
           : customerConfirmed
-            ? "16px 20px 20px"
+            ? "10px"
             : "8px 16px 12px",
         boxSizing: "border-box",
         overflow: "visible",
@@ -2103,227 +1708,320 @@ export default function CustomerScreen({
         </div>
       ) : (
         <>
-          <LogoHeader />
-
           <div
+            ref={kioskRef}
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: 10,
-              marginBottom: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <SectionTitle
-              title={`הזמנה עבור ${displayCustomerName}`}
-              subtitle="בחר מנות, שנה תוספות, וסגור הזמנה בקלות"
-            />
-
-            <button
-              onClick={() => setCustomerConfirmed(false)}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 14,
-                border: `1px solid ${THEME.border}`,
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              שינוי שם
-            </button>
-          </div>
-
-          <div
-            style={{
+              height: kioskHeight || (isMobile ? "calc(100svh - 190px)" : "calc(100vh - 150px)"),
               display: "grid",
-              gridTemplateColumns: isMobile
-                ? "minmax(0, 1fr)"
-                : "minmax(0, 1.35fr) minmax(320px, 0.72fr)",
-              gap: 14,
-              alignItems: "start",
-              paddingBottom: isMobile ? 12 : 0,
+              gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 380px",
+              gridTemplateRows: "minmax(0, 1fr)",
+              background: KIOSK.bg,
+              borderRadius: isMobile ? 18 : 22,
+              overflow: "hidden",
+              border: `1px solid ${KIOSK.line}`,
+              color: KIOSK.ink,
+              direction: "rtl",
+              textAlign: "right",
             }}
           >
-            <div style={{ display: "grid", gap: 12 }}>
-              {menu.map((item) => (
-                <MenuItemCard
-                  key={item.id}
-                  item={item}
-                  soldOut={soldOut}
-                  qty={cart.filter((c) => c.id === item.id).length}
-                  currentMods={getModsForItem(item.id)}
-                  currentDrink={getDrinkForItem(item.id)}
-                  ratingStats={menuRatingsByItemId[item.id] || null}
-                  onOpenReviews={openReviewsForItem}
-                  showInlineDrinkPicker={openInlineDrinkPickerId === item.id}
-                  drinkPickerRef={(el) => {
-                    if (el) inlineDrinkPickerRefs.current[item.id] = el;
-                    else delete inlineDrinkPickerRefs.current[item.id];
-                  }}
-                  isMobile={isMobile}
-                  onToggleMod={toggleItemMod}
-                  onSelectStandaloneDrink={selectDrinkForItem}
-                  onChooseMealDrink={addMealWithDrinkToCart}
-                  onCloseInlineDrinkPicker={() => setOpenInlineDrinkPickerId(null)}
-                  onAdd={() => addToCart(item)}
-                  onRemove={() => removeOneFromCart(item.id)}
-                />
-              ))}
-            </div>
-
-            {!isMobile && (
-              <OrderSidebar
-                grouped={grouped}
-                total={total}
-                clearCart={clearCart}
-                setShowConfirm={setShowConfirm}
-                isMobile={isMobile}
-              />
-            )}
-          </div>
-
-          {isMobile && (
-            <MobileSummaryDrawer
-              grouped={grouped}
-              total={total}
-              clearCart={clearCart}
-              setShowConfirm={setShowConfirm}
-              isOpen={isMobileSummaryOpen}
-              setIsOpen={setIsMobileSummaryOpen}
-            />
-          )}
-
-          {showConfirm && typeof document !== "undefined" && createPortal(
-            <div
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(15,23,42,0.45)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 16,
-                zIndex: 41,
-              }}
-            >
-              <div
-                ref={modalRef}
-                style={{
-                  width: "100%",
-                  maxWidth: 540,
-                  background: "white",
-                  borderRadius: 24,
-                  padding: isMobile ? 16 : 18,
-                  boxShadow: "0 24px 70px rgba(15,23,42,0.24)",
-                  maxHeight: qrOpen ? "90vh" : "84vh",
-                  overflowY: "auto",
-                  overflowX: "hidden",
-                  direction: "rtl",
-                  textAlign: "right",
-                }}
-              >
-                <h3
-                  style={{
-                    textAlign: "center",
-                    marginTop: 0,
-                    fontSize: isMobile ? 26 : 28,
-                    fontWeight: 900,
-                    marginBottom: 12,
-                  }}
-                >
-                  אישור הזמנה
-                </h3>
-
+            {(!isMobile || !isMobilePanelOpen) && (
+              <section style={{ display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
                 <div
                   style={{
-                    border: `1px solid ${THEME.borderSoft}`,
-                    borderRadius: 18,
-                    padding: 12,
-                    background: "#f8fafc",
-                    margin: "10px 0 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: isMobile ? "10px 12px 4px" : "12px 16px 6px",
                   }}
                 >
-                  {grouped.map(([key, item]) => (
-                    <div
-                      key={key}
-                      style={{
-                        display: "grid",
-                        gap: 4,
-                        marginBottom: 9,
-                        paddingBottom: 8,
-                        borderBottom: `1px solid ${THEME.borderSoft}`,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 12,
-                        }}
-                      >
-                        <span>
-                          {item.qty}x {item.name}
-                        </span>
-                        <span style={{ fontWeight: 800 }}>
-                          ₪{item.qty * item.price}
-                        </span>
-                      </div>
-
-                      {item.allowsToppings && (
-                        <div style={{ color: THEME.textMuted, fontSize: 13 }}>
-                          תוספות: {modsToLabel(item)}
-                        </div>
-                      )}
-
-                      {Array.isArray(item.familyMeals) && item.familyMeals.length === 4 && (
-                        <div style={{ display: "grid", gap: 3, color: THEME.textMuted, fontSize: 13 }}>
-                          {item.familyMeals.map((meal) => (
-                            <div key={`${key}-confirm-meal-${meal.mealNumber}`}>
-                              מנה {meal.mealNumber}: {formatFamilyMealMods(meal.mods)}, שתיה: {meal.drinkLabel || "לא נבחרה"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                  <img
+                    src="/logo.png"
+                    alt="הנחשוניה"
+                    style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 19 }}>
+                      {`הזמנה עבור ${displayCustomerName}`}
                     </div>
-                  ))}
-
-                  {orderType === "delivery" && (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        marginTop: 8,
-                        paddingTop: 8,
-                        borderTop: `1px dashed ${THEME.borderSoft}`,
-                        color: "#92400e",
-                        fontWeight: 700,
-                      }}
-                    >
-                      <span>🛵 דמי משלוח{deliveryCity ? ` (${deliveryCity})` : ""}</span>
-                      <span style={{ fontWeight: 800 }}>
-                        {deliveryCity ? `₪${deliveryFee}` : "בחרו יישוב"}
-                      </span>
+                    <div style={{ color: KIOSK.muted, fontSize: 12.5, fontWeight: 700 }}>
+                      {isMobile ? "בחרו מנות, ואז המשיכו להזמנה בכפתור למטה" : "בחרו מנות, ואז השלימו את ההזמנה בצד"}
                     </div>
-                  )}
-
-                  <div
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerConfirmed(false)}
                     style={{
-                      fontWeight: 900,
-                      fontSize: 22,
-                      marginTop: 8,
-                      color: THEME.text,
+                      padding: "8px 12px",
+                      borderRadius: 12,
+                      border: `1px solid ${KIOSK.line}`,
+                      background: "white",
+                      color: KIOSK.ink,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontFamily: "inherit",
+                      flexShrink: 0,
                     }}
                   >
-                    סה"כ: ₪{orderTotal}
-                  </div>
+                    שינוי שם
+                  </button>
                 </div>
 
                 <div
+                  role="tablist"
                   style={{
-                    marginBottom: 18,
+                    display: "flex",
+                    gap: isMobile ? 6 : 8,
+                    padding: isMobile ? "6px 10px 10px" : "6px 16px 12px",
+                    borderBottom: `1px solid ${KIOSK.line}`,
+                    overflowX: "auto",
+                  }}
+                >
+                  {KIOSK_CATEGORIES.map((category) => {
+                    const active = activeCategory === category.key;
+                    return (
+                      <button
+                        key={category.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setActiveCategory(category.key)}
+                        style={{
+                          padding: isMobile ? "9px 12px" : "10px 16px",
+                          borderRadius: 999,
+                          border: `2px solid ${active ? KIOSK.ink : KIOSK.line}`,
+                          background: active ? KIOSK.ink : "white",
+                          color: active ? "white" : KIOSK.ink,
+                          fontWeight: 900,
+                          fontSize: isMobile ? 14 : 15,
+                          whiteSpace: "nowrap",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {category.icon} {category.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: isMobile ? 10 : 16 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 140 : 165}px, 1fr))`,
+                      gap: isMobile ? 10 : 12,
+                    }}
+                  >
+                    {kioskTiles.map((tile) => (
+                      <KioskTile
+                        key={tile.key}
+                        tile={tile}
+                        isMobile={isMobile}
+                        onSelect={() =>
+                          tile.drink ? addDrinkToCart(tile.item, tile.drink) : openMenuItem(tile.item)
+                        }
+                        onOpenReviews={() => openReviewsForItem(tile.item)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {isMobile && (
+                  <button
+                    type="button"
+                    disabled={cart.length === 0}
+                    onClick={() => setIsMobilePanelOpen(true)}
+                    style={{
+                      margin: "8px 10px 10px",
+                      padding: "14px 18px",
+                      borderRadius: 16,
+                      border: "none",
+                      background: KIOSK.accent,
+                      color: "white",
+                      fontWeight: 900,
+                      fontSize: 17,
+                      fontFamily: "inherit",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      cursor: cart.length ? "pointer" : "not-allowed",
+                      opacity: cart.length ? 1 : 0.45,
+                    }}
+                  >
+                    <span>🛒 ההזמנה שלי ({cart.length})</span>
+                    <span>₪{orderTotal} ←</span>
+                  </button>
+                )}
+              </section>
+            )}
+
+            {(!isMobile || isMobilePanelOpen) && (
+              <aside
+                style={{
+                  background: "white",
+                  borderRight: isMobile ? "none" : `1px solid ${KIOSK.line}`,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  minWidth: 0,
+                }}
+              >
+                {isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => setIsMobilePanelOpen(false)}
+                    style={{
+                      padding: "12px 14px",
+                      border: "none",
+                      borderBottom: `1px solid ${KIOSK.line}`,
+                      background: "white",
+                      color: KIOSK.accent,
+                      fontWeight: 900,
+                      fontSize: 15,
+                      fontFamily: "inherit",
+                      textAlign: "right",
+                      cursor: "pointer",
+                    }}
+                  >
+                    → חזרה לתפריט
+                  </button>
+                )}
+
+                <div
+                  role="tablist"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    borderBottom: `1px solid ${KIOSK.line}`,
+                  }}
+                >
+                  {panelTabs.map((tab) => {
+                    const active = panelTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setPanelTab(tab.key)}
+                        style={{
+                          padding: "12px 4px",
+                          border: "none",
+                          borderBottom: `3px solid ${active ? KIOSK.accent : "transparent"}`,
+                          background: "white",
+                          color: active ? KIOSK.accent : KIOSK.muted,
+                          fontWeight: 900,
+                          fontSize: 14,
+                          fontFamily: "inherit",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {tab.label}
+                        <span style={{ display: "block", fontSize: 11, fontWeight: 700 }}>{tab.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px" }}>
+                  {panelTab === "order" &&
+                    (grouped.length === 0 ? (
+                      <div style={{ color: KIOSK.muted, textAlign: "center", padding: 14, fontWeight: 700 }}>
+                        ההזמנה ריקה. בחרו מנה מהתפריט כדי להתחיל
+                      </div>
+                    ) : (
+                      <>
+                        {grouped.map(([key, item]) => {
+                          const lineSoldOut = isCartItemSoldOut(item);
+                          return (
+                            <div
+                              key={key}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "8px 0",
+                                borderBottom: `1px solid ${KIOSK.line}`,
+                              }}
+                            >
+                              <img
+                                src={item.imageSrc || menuItemImage(item.id)}
+                                alt=""
+                                style={{
+                                  width: 52,
+                                  height: 40,
+                                  objectFit: item.imageSrc ? "contain" : "cover",
+                                  borderRadius: 8,
+                                  flexShrink: 0,
+                                  background: KIOSK.imgBg,
+                                }}
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 800, fontSize: 14.5 }}>{item.name}</div>
+                                {item.allowsToppings && (
+                                  <div style={{ fontSize: 12.5, color: KIOSK.muted }}>
+                                    {kioskMealSummary(item.mods, null)}
+                                  </div>
+                                )}
+                                {Array.isArray(item.familyMeals) &&
+                                  item.familyMeals.map((meal) => (
+                                    <div key={`${key}-meal-${meal.mealNumber}`} style={{ fontSize: 12.5, color: KIOSK.muted }}>
+                                      <b>מנה {meal.mealNumber}:</b> {kioskMealSummary(meal.mods, meal.drinkLabel || "לא נבחרה")}
+                                    </div>
+                                  ))}
+                                {lineSoldOut && (
+                                  <div style={{ fontSize: 12.5, color: "#b91c1c", fontWeight: 800 }}>
+                                    חסר במלאי, יש להסיר
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ display: "grid", justifyItems: "center", gap: 4, flexShrink: 0 }}>
+                                <div style={{ fontWeight: 900 }}>₪{item.qty * item.price}</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    aria-label={`הסר אחד: ${item.name}`}
+                                    onClick={() => removeOneOfGroup(key)}
+                                    style={kioskCloseButtonStyle}
+                                  >
+                                    −
+                                  </button>
+                                  <span style={{ fontWeight: 900, minWidth: 14, textAlign: "center" }}>{item.qty}</span>
+                                  <button
+                                    type="button"
+                                    aria-label={`הוסף עוד: ${item.name}`}
+                                    disabled={lineSoldOut}
+                                    onClick={() => addOneOfGroup(key)}
+                                    style={{ ...kioskCloseButtonStyle, opacity: lineSoldOut ? 0.4 : 1 }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={clearCart}
+                          style={{
+                            marginTop: 10,
+                            border: "none",
+                            background: "none",
+                            color: KIOSK.muted,
+                            fontWeight: 800,
+                            fontFamily: "inherit",
+                            cursor: "pointer",
+                          }}
+                        >
+                          🗑 לנקות הכל
+                        </button>
+                      </>
+                    ))}
+
+                  {panelTab === "delivery" && (
+                <div
+                  style={{
+                    marginBottom: 4,
                     border: `2px solid ${orderType === "delivery" ? "#f59e0b" : THEME.border}`,
                     borderRadius: 18,
                     overflow: "hidden",
@@ -2530,135 +2228,143 @@ export default function CustomerScreen({
                     </div>
                   )}
                 </div>
+                  )}
 
-                <div
-                  style={{
-                    marginBottom: 8,
-                    fontWeight: 900,
-                    color: THEME.text,
-                    fontSize: 15,
-                  }}
-                >
-                  מהו אופן התשלום המבוקש?
+                  {panelTab === "pay" && (
+                    <>
+                      <div style={{ marginBottom: 8, fontWeight: 900, fontSize: 15 }}>
+                        מהו אופן התשלום המבוקש?
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                        <PaymentChoiceButton
+                          label="מזומן"
+                          theme="dark"
+                          active={requestedPayment === "cash"}
+                          onClick={() => setRequestedPayment("cash")}
+                        />
+                        <PaymentChoiceButton
+                          label="BIT"
+                          theme="bit"
+                          active={requestedPayment === "bit"}
+                          onClick={() => setRequestedPayment("bit")}
+                        />
+                        <PaymentChoiceButton
+                          label="PayBox"
+                          theme="paybox"
+                          active={requestedPayment === "paybox"}
+                          onClick={() => setRequestedPayment("paybox")}
+                        />
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: 14,
+                          borderRadius: 16,
+                          background: KIOSK.soft,
+                          textAlign: "center",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {requestedPayment === "cash" ? (
+                          <div>💵 משלמים במזומן בעת {orderType === "delivery" ? "המסירה" : "האיסוף"}</div>
+                        ) : (
+                          <>
+                            <img
+                              src={requestedPayment === "bit" ? "/Bit QR Code.jpeg" : "/PayBoox QR Code.jpeg"}
+                              alt={requestedPayment === "bit" ? "BIT QR Code" : "PayBox QR Code"}
+                              style={{
+                                width: isMobile ? 190 : 200,
+                                maxWidth: "100%",
+                                borderRadius: 12,
+                                background: "white",
+                                display: "block",
+                                margin: "0 auto 8px",
+                              }}
+                            />
+                            <div>
+                              סרקו ושלמו <b>₪{orderTotal}</b> ב{paymentLabels[requestedPayment]}, ואז לחצו "שליחת הזמנה"
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {!deliveryDetailsComplete && (
+                        <div style={{ marginTop: 10, color: "#b91c1c", fontWeight: 800, textAlign: "center" }}>
+                          חסרים פרטי משלוח. השלימו אותם בטאב "איסוף/משלוח".
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    gap: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  <PaymentChoiceButton
-                    label="מזומן"
-                    theme="dark"
-                    active={requestedPayment === "cash"}
-                    onClick={() => setRequestedPayment("cash")}
-                  />
-                  <PaymentChoiceButton
-                    label="BIT"
-                    theme="bit"
-                    active={requestedPayment === "bit"}
-                    onClick={() => setRequestedPayment("bit")}
-                  />
-                  <PaymentChoiceButton
-                    label="PayBox"
-                    theme="paybox"
-                    active={requestedPayment === "paybox"}
-                    onClick={() => setRequestedPayment("paybox")}
-                  />
-                </div>
-
-                {requestedPayment === "bit" && (
-                  <div ref={qrSectionRef} style={{ textAlign: "center", marginBottom: 14 }}>
-                    <img
-                      src="/Bit QR Code.jpeg"
-                      alt="BIT QR Code"
-                      style={{
-                        width: isMobile ? 210 : 220,
-                        maxWidth: "100%",
-                        borderRadius: 16,
-                        border: `1px solid ${THEME.borderSoft}`,
-                      }}
-                    />
+                <div style={{ padding: "12px 14px", borderTop: `1px solid ${KIOSK.line}`, display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                    <span>סכום ביניים</span>
+                    <span>₪{total}</span>
                   </div>
-                )}
-
-                {requestedPayment === "paybox" && (
-                  <div ref={qrSectionRef} style={{ textAlign: "center", marginBottom: 14 }}>
-                    <img
-                      src="/PayBoox QR Code.jpeg"
-                      alt="PayBox QR Code"
-                      style={{
-                        width: isMobile ? 210 : 220,
-                        maxWidth: "100%",
-                        borderRadius: 16,
-                        border: `1px solid ${THEME.borderSoft}`,
-                      }}
-                    />
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    onClick={handleSubmitOrder}
-                    disabled={isSubmittingOrder}
-                    style={{
-                      padding: "12px",
-                      borderRadius: 16,
-                      border: "none",
-                      background: `linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.warm} 100%)`,
-                      color: "white",
-                      cursor: isSubmittingOrder ? "not-allowed" : "pointer",
-                      opacity: isSubmittingOrder ? 0.75 : 1,
-                      fontWeight: 800,
-                      fontSize: 15,
-                    }}
-                  >
-                    {isSubmittingOrder ? "שולח..." : "שלח לקופה"}
-                  </button>
-
-                  <button
-                    onClick={() => setShowConfirm(false)}
-                    disabled={isSubmittingOrder}
-                    style={{
-                      padding: "12px",
-                      borderRadius: 16,
-                      border: "1px solid #ccc",
-                      background: "white",
-                      cursor: isSubmittingOrder ? "not-allowed" : "pointer",
-                      opacity: isSubmittingOrder ? 0.7 : 1,
-                      fontWeight: 800,
-                      fontSize: 15,
-                    }}
-                  >
-                    עדכון הזמנה
-                  </button>
-                </div>
-
-                {submitOrderError && (
+                  {orderType === "delivery" && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                      <span>🛵 דמי משלוח{deliveryCity ? ` (${deliveryCity})` : ""}</span>
+                      <span>{deliveryCity ? `₪${deliveryFee}` : "בחרו יישוב"}</span>
+                    </div>
+                  )}
                   <div
                     style={{
-                      marginTop: 10,
-                      color: "#b91c1c",
-                      fontWeight: 700,
-                      textAlign: "center",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontWeight: 900,
+                      fontSize: 20,
+                      paddingTop: 6,
+                      borderTop: `2px dashed ${KIOSK.line}`,
                     }}
                   >
-                    {submitOrderError}
+                    <span>סה"כ לתשלום</span>
+                    <span>₪{orderTotal}</span>
                   </div>
-                )}
-              </div>
-            </div>,
-            document.body
-          )}
+
+                  {panelTab === "order" && (
+                    <button
+                      type="button"
+                      disabled={cart.length === 0}
+                      onClick={() => setPanelTab("delivery")}
+                      style={kioskCtaStyle(cart.length > 0)}
+                    >
+                      המשך לאיסוף/משלוח ←
+                    </button>
+                  )}
+                  {panelTab === "delivery" && (
+                    <button
+                      type="button"
+                      disabled={!deliveryDetailsComplete}
+                      onClick={() => setPanelTab("pay")}
+                      style={kioskCtaStyle(deliveryDetailsComplete)}
+                    >
+                      המשך לתשלום ←
+                    </button>
+                  )}
+                  {panelTab === "pay" && (
+                    <button
+                      type="button"
+                      disabled={!canSubmitOrder}
+                      onClick={handleSubmitOrder}
+                      style={kioskCtaStyle(canSubmitOrder)}
+                    >
+                      {isSubmittingOrder ? "שולח..." : `שליחת הזמנה · ₪${orderTotal}`}
+                    </button>
+                  )}
+
+                  {submitOrderError && (
+                    <div style={{ color: "#b91c1c", fontWeight: 700, textAlign: "center" }}>
+                      {submitOrderError}
+                    </div>
+                  )}
+                </div>
+              </aside>
+            )}
+          </div>
+
+          {itemSheetModal}
 
           {familyConfigModal}
 
