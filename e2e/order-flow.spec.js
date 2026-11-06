@@ -1,14 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN } from "./constants.js";
 
-function menuCard(page, price) {
-  return page
-    .locator("div")
-    .filter({ hasText: price })
-    .filter({ has: page.getByRole("button", { name: "+", exact: true }) })
-    .last();
-}
-
 async function startCustomerOrder(page, customerName) {
   await page.goto("/");
   await page.getByPlaceholder("למשל: חיים לוי").fill(customerName);
@@ -17,12 +9,20 @@ async function startCustomerOrder(page, customerName) {
 }
 
 async function addBurgerWithToppings(page, toppings) {
-  const card = menuCard(page, "₪35");
+  await page.getByRole("button", { name: /₪35/ }).click();
+  const sheet = page.getByRole("dialog");
   for (const topping of toppings) {
-    await card.getByText(topping, { exact: true }).click();
+    await sheet.getByRole("button", { name: topping, exact: true }).click();
   }
-  await card.getByRole("button", { name: "+", exact: true }).click();
-  await expect(card.getByText("כמות בעגלה: 1")).toBeVisible();
+  await sheet.getByRole("button", { name: /הוספה להזמנה/ }).click();
+  await expect(page.getByText("✓ 1 בהזמנה")).toBeVisible();
+}
+
+async function submitOrder(page) {
+  await page.getByRole("button", { name: /המשך לתשלום/ }).click();
+  await page.getByRole("button", { name: "מזומן", exact: true }).click();
+  await page.getByRole("button", { name: /שליחת הזמנה/ }).click();
+  await expect(page.getByRole("button", { name: /שליחת הזמנה/ })).toBeHidden();
 }
 
 async function loginAsAdmin(page) {
@@ -57,10 +57,8 @@ test("pickup order: customer → cashier → kitchen (with toppings) → deliver
 
   await startCustomerOrder(customer, customerName);
   await addBurgerWithToppings(customer, ["בצל", "חסה"]);
-  await customer.getByRole("button", { name: "המשך לביצוע הזמנה" }).click();
-  await customer.getByRole("button", { name: "מזומן" }).click();
-  await customer.getByRole("button", { name: "שלח לקופה" }).click();
-  await expect(customer.getByRole("button", { name: "שלח לקופה" })).toBeHidden();
+  await customer.getByRole("button", { name: /המשך לאיסוף/ }).click();
+  await submitOrder(customer);
 
   await loginAsAdmin(admin);
   await admin.getByRole("button", { name: "קופאי", exact: true }).click();
@@ -87,15 +85,13 @@ test("delivery order shows up on the delivery screen and can be dispatched", asy
 
   await startCustomerOrder(customer, customerName);
   await addBurgerWithToppings(customer, ["עגבניה"]);
-  await customer.getByRole("button", { name: "המשך לביצוע הזמנה" }).click();
+  await customer.getByRole("button", { name: /המשך לאיסוף/ }).click();
   await customer.getByRole("button", { name: "🛵 משלוח" }).click();
   await customer.getByRole("button", { name: /20:00/ }).click();
   await customer.getByPlaceholder("רחוב ומספר בית").fill("הגפן 7");
   await customer.getByRole("button", { name: /אליאב/ }).click();
   await customer.getByPlaceholder("לדוגמה 050-1234567").fill("0501234567");
-  await customer.getByRole("button", { name: "מזומן" }).click();
-  await customer.getByRole("button", { name: "שלח לקופה" }).click();
-  await expect(customer.getByRole("button", { name: "שלח לקופה" })).toBeHidden();
+  await submitOrder(customer);
 
   await loginAsAdmin(admin);
   await admin.getByRole("button", { name: "משלוחים", exact: true }).click();
