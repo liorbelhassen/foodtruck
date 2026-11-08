@@ -470,6 +470,7 @@ export default function CustomerScreen({
   onSubmitReview = async () => {},
   menuRatingsByItemId = {},
   menuItemReviewsById = {},
+  onOpenPrivacy = () => {},
 }) {
   const [showFamilyConfig, setShowFamilyConfig] = useState(false);
   const [familyConfigError, setFamilyConfigError] = useState("");
@@ -530,11 +531,12 @@ export default function CustomerScreen({
   const deliveryFee = orderType === "delivery" ? DELIVERY_FEES_BY_CITY[deliveryCity] || 0 : 0;
   const orderTotal = total + deliveryFee;
   const deliveryDetailsComplete =
-    orderType === "pickup" ||
+    Boolean(customerName.trim()) &&
+    (orderType === "pickup" ||
     (Boolean(deliveryCity) &&
       Boolean(deliveryTime) &&
       Boolean(deliveryAddress.trim()) &&
-      Boolean(deliveryPhone.trim()));
+      Boolean(deliveryPhone.trim())));
   const grouped = useMemo(() => groupCart(cart), [cart]);
   const customerStatusModalKey =
     customerOrder?.id && customerOrder?.status
@@ -1763,29 +1765,12 @@ export default function CustomerScreen({
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 19 }}>
-                      {`הזמנה עבור ${displayCustomerName}`}
+                      🍔 הזמנה עצמית
                     </div>
                     <div style={{ color: KIOSK.muted, fontSize: 12.5, fontWeight: 700 }}>
                       {isMobile ? "בחרו מנות, ואז המשיכו להזמנה בכפתור למטה" : "בחרו מנות, ואז השלימו את ההזמנה בצד"}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setCustomerConfirmed(false)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 12,
-                      border: `1px solid ${KIOSK.line}`,
-                      background: "white",
-                      color: KIOSK.ink,
-                      cursor: "pointer",
-                      fontWeight: 700,
-                      fontFamily: "inherit",
-                      flexShrink: 0,
-                    }}
-                  >
-                    שינוי שם
-                  </button>
                 </div>
 
                 <div
@@ -2041,6 +2026,30 @@ export default function CustomerScreen({
                     ))}
 
                   {panelTab === "delivery" && (
+                    <>
+                      <label style={{ display: "block", marginBottom: 12 }}>
+                        <div style={deliveryLabelStyle}>
+                          👤 שם המזמין <span style={{ color: "#dc2626" }}>*</span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="השם שיופיע על ההזמנה"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          style={{
+                            width: "100%",
+                            boxSizing: "border-box",
+                            padding: "12px 14px",
+                            borderRadius: 14,
+                            border: `2px solid ${customerName.trim() ? KIOSK.line : KIOSK.accent}`,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            fontFamily: "inherit",
+                            direction: "rtl",
+                            color: "#0f172a",
+                          }}
+                        />
+                      </label>
                 <div
                   style={{
                     marginBottom: 4,
@@ -2250,6 +2259,17 @@ export default function CustomerScreen({
                     </div>
                   )}
                 </div>
+                      <div style={{ fontSize: 12.5, color: KIOSK.muted, marginTop: 10, fontWeight: 600 }}>
+                        🔒 השם, הטלפון והכתובת משמשים רק לטיפול בהזמנה.{" "}
+                        <button
+                          type="button"
+                          onClick={onOpenPrivacy}
+                          style={{ border: "none", background: "none", padding: 0, color: KIOSK.accentInk, fontWeight: 800, textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}
+                        >
+                          מדיניות פרטיות
+                        </button>
+                      </div>
+                    </>
                   )}
 
                   {panelTab === "pay" && (
@@ -2313,7 +2333,7 @@ export default function CustomerScreen({
 
                       {!deliveryDetailsComplete && (
                         <div style={{ marginTop: 10, color: "#b91c1c", fontWeight: 800, textAlign: "center" }}>
-                          חסרים פרטי משלוח. השלימו אותם בטאב "איסוף/משלוח".
+                          חסרים פרטים (שם או פרטי משלוח). השלימו אותם בטאב "איסוף/משלוח".
                         </div>
                       )}
                     </>

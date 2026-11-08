@@ -1,11 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN } from "./constants.js";
 
-async function startCustomerOrder(page, customerName) {
+async function startCustomerOrder(page) {
   await page.goto("/");
-  await page.getByPlaceholder("למשל: חיים לוי").fill(customerName);
-  await page.keyboard.press("Enter");
-  await expect(page.getByText(`הזמנה עבור ${customerName}`)).toBeVisible();
+  await expect(page.getByText("הזמנה עצמית")).toBeVisible();
 }
 
 async function addBurgerWithToppings(page, toppings) {
@@ -18,7 +16,8 @@ async function addBurgerWithToppings(page, toppings) {
   await expect(page.getByText("✓ 1 בהזמנה")).toBeVisible();
 }
 
-async function submitOrder(page) {
+async function submitOrder(page, customerName) {
+  await page.getByPlaceholder("השם שיופיע על ההזמנה").fill(customerName);
   await page.getByRole("button", { name: /המשך לתשלום/ }).click();
   await page.getByRole("button", { name: "מזומן", exact: true }).click();
   await page.getByRole("button", { name: /שליחת הזמנה/ }).click();
@@ -27,6 +26,8 @@ async function submitOrder(page) {
 
 async function loginAsAdmin(page) {
   await page.goto("/");
+  await page.getByRole("button", { name: "תפריט" }).click();
+  await page.getByRole("button", { name: "כניסת צוות" }).click();
   await page.getByRole("button", { name: "כניסה עם אימייל" }).click();
   await page.getByPlaceholder("אימייל").fill(ADMIN.email);
   await page.getByPlaceholder("סיסמה").fill(ADMIN.password);
@@ -42,11 +43,11 @@ function cashierOrderCard(page, customerName) {
     .last();
 }
 
-test("operational screens require admin login", async ({ page }) => {
+test("operational screens are hidden from customers", async ({ page }) => {
   await page.goto("/");
-  for (const screen of ["קופאי", "מטבח", "דוחות", "משלוחים"]) {
-    await page.getByRole("button", { name: screen, exact: true }).click();
-    await expect(page.getByText("צריך להתחבר")).toBeVisible();
+  await expect(page.getByText("הזמנה עצמית")).toBeVisible();
+  for (const screen of ["קופאי", "מטבח", "דוחות", "משלוחים", "מלאי"]) {
+    await expect(page.getByRole("button", { name: screen, exact: true })).toHaveCount(0);
   }
 });
 
@@ -55,10 +56,10 @@ test("pickup order: customer → cashier → kitchen (with toppings) → deliver
   const customer = await (await browser.newContext()).newPage();
   const admin = await (await browser.newContext()).newPage();
 
-  await startCustomerOrder(customer, customerName);
+  await startCustomerOrder(customer);
   await addBurgerWithToppings(customer, ["בצל", "חסה"]);
   await customer.getByRole("button", { name: /המשך לאיסוף/ }).click();
-  await submitOrder(customer);
+  await submitOrder(customer, customerName);
 
   await loginAsAdmin(admin);
   await admin.getByRole("button", { name: "קופאי", exact: true }).click();
@@ -83,7 +84,7 @@ test("delivery order shows up on the delivery screen and can be dispatched", asy
   const customer = await (await browser.newContext()).newPage();
   const admin = await (await browser.newContext()).newPage();
 
-  await startCustomerOrder(customer, customerName);
+  await startCustomerOrder(customer);
   await addBurgerWithToppings(customer, ["עגבניה"]);
   await customer.getByRole("button", { name: /המשך לאיסוף/ }).click();
   await customer.getByRole("button", { name: "🛵 משלוח" }).click();
@@ -91,7 +92,7 @@ test("delivery order shows up on the delivery screen and can be dispatched", asy
   await customer.getByPlaceholder("רחוב ומספר בית").fill("הגפן 7");
   await customer.getByRole("button", { name: /אליאב/ }).click();
   await customer.getByPlaceholder("לדוגמה 050-1234567").fill("0501234567");
-  await submitOrder(customer);
+  await submitOrder(customer, customerName);
 
   await loginAsAdmin(admin);
   await admin.getByRole("button", { name: "משלוחים", exact: true }).click();

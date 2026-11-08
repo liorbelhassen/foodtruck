@@ -93,6 +93,9 @@ const FOODTRUCK_MANAGERS = [
   { name: "רוני הרשקוביץ", role: "רכזת נחשון", phone: "058-5278898" },
 ];
 
+const MENU_ITEM_STYLE = { padding: "10px 12px", textAlign: "right", borderRadius: 10, fontWeight: 700, fontSize: 15, border: "none", background: "none", color: "#2b2118", cursor: "pointer", fontFamily: "inherit" };
+const STAFF_ITEM_STYLE = { padding: "8px 12px", textAlign: "right", borderRadius: 10, fontWeight: 600, fontSize: 13, border: "none", borderTop: "1px solid #eee", marginTop: 4, background: "none", color: "#8a7b6c", cursor: "pointer", fontFamily: "inherit" };
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -108,8 +111,12 @@ export default function App() {
   const [menuRatingsByItemId, setMenuRatingsByItemId] = useState({});
 
   const [customerName, setCustomerName] = useState("");
-  const [customerConfirmed, setCustomerConfirmed] = useState(false);
+  const [customerConfirmed, setCustomerConfirmed] = useState(true);
   const [showContacts, setShowContacts] = useState(false);
+  const [showSiteMenu, setShowSiteMenu] = useState(false);
+  const [showStaffLogin, setShowStaffLogin] = useState(false);
+  const [showCerts, setShowCerts] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [cart, setCart] = useState([]);
   const [selectedMods, setSelectedMods] = useState([]);
 
@@ -130,6 +137,7 @@ export default function App() {
   );
 
   const isAdmin = !!user && !user.isAnonymous;
+  const activeScreen = isAdmin ? screen : "customer";
   const isMobile = viewportWidth <= 900;
   const isDesktop = viewportWidth > 900;
   const activeCustomerOrder =
@@ -461,28 +469,40 @@ export default function App() {
       <div
         style={{
           display: "flex",
-          justifyContent: "flex-start",
           alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-          marginBottom: isDesktop ? 8 : 14,
+          gap: 10,
+          padding: isDesktop ? "8px 14px" : "8px 10px",
+          background: "#2b2118",
+          color: "white",
+          borderRadius: 16,
+          marginBottom: isDesktop ? 8 : 10,
+          position: "relative",
+          zIndex: 20,
         }}
       >
-        {user?.isAnonymous && (
-          <span
+        <img src="/logo.png" alt="הנחשוניה" style={{ height: 42, width: 42, borderRadius: "50%", objectFit: "cover" }} />
+        <span style={{ fontWeight: 900, fontSize: 18, color: "#f39a3d" }}>הנחשוניה</span>
+        <div style={{ marginInlineStart: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowConnectedCustomers(true)}
             style={{
+              cursor: "pointer",
+              fontFamily: "inherit",
               padding: isDesktop ? "8px 12px" : "9px 14px",
               borderRadius: "999px",
-              background: "#ecfeff",
-              border: "1px solid #bae6fd",
-              color: "#0f766e",
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              color: "#1e3a8a",
               fontWeight: 800,
               fontSize: isDesktop ? "13px" : "14px",
               lineHeight: 1.2,
+              whiteSpace: "nowrap",
             }}
           >
-            לקוח
-          </span>
+            כמה אנשים מחוברים ברגע זה: {connectedCustomersCount} ▾
+          </button>
         )}
 
         {user && !user.isAnonymous && (
@@ -509,69 +529,52 @@ export default function App() {
           </>
         )}
 
-        <button
-          onClick={signInAsAdminWithGoogle}
-          style={authBtnStyle(true, isDesktop)}
-        >
-          כניסת אדמין
-        </button>
-
-        {(!user || user.isAnonymous) && (
-          <button
-            onClick={() => {
-              setAdminLoginError("");
-              setShowAdminEmailLogin(true);
-            }}
-            style={authBtnStyle(false, isDesktop)}
-          >
-            כניסה עם אימייל
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setShowConnectedCustomers(true)}
-            style={{
-              cursor: "pointer",
-              fontFamily: "inherit",
-              marginInlineStart: "auto",
-              padding: isDesktop ? "8px 12px" : "9px 14px",
-              borderRadius: "999px",
-              background: "#eff6ff",
-              border: "1px solid #bfdbfe",
-              color: "#1e3a8a",
-              fontWeight: 800,
-              fontSize: isDesktop ? "13px" : "14px",
-              lineHeight: 1.2,
-              whiteSpace: "nowrap",
-            }}
-          >
-            כמה אנשים מחוברים ברגע זה: {connectedCustomersCount} ▾
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setShowContacts(true)}
-          style={{
-            marginInlineStart: isAdmin ? 0 : "auto",
-            padding: isDesktop ? "8px 14px" : "9px 16px",
-            borderRadius: "999px",
-            border: "1px solid #a7f3d0",
-            background: "#ecfdf5",
-            color: "#047857",
-            fontWeight: 900,
-            fontSize: isDesktop ? "14px" : "15px",
-            lineHeight: 1.2,
-            whiteSpace: "nowrap",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            boxShadow: "0 6px 16px rgba(4,120,87,0.12)",
-          }}
-        >
-          📞 צור קשר
-        </button>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              aria-label="תפריט"
+              aria-expanded={showSiteMenu}
+              onClick={() => setShowSiteMenu((v) => !v)}
+              style={{ color: "white", fontSize: 24, padding: "2px 10px", background: "none", border: "none", cursor: "pointer" }}
+            >
+              ☰
+            </button>
+            {showSiteMenu && (
+              <>
+                <div onClick={() => setShowSiteMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                <div
+                  role="menu"
+                  style={{ position: "absolute", left: 0, top: 44, zIndex: 2, background: "white", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.2)", minWidth: 200, padding: 6, display: "grid", direction: "rtl" }}
+                >
+                  {[
+                    ["📞 צור קשר", () => setShowContacts(true)],
+                    ["📜 תעודות כשרות", () => setShowCerts(true)],
+                    ["🔒 מדיניות פרטיות", () => setShowPrivacy(true)],
+                  ].map(([label, open]) => (
+                    <button key={label} type="button" role="menuitem" onClick={() => { setShowSiteMenu(false); open(); }} style={MENU_ITEM_STYLE}>
+                      {label}
+                    </button>
+                  ))}
+                  {!isAdmin &&
+                    (showStaffLogin ? (
+                      <>
+                        <button type="button" onClick={() => { setShowSiteMenu(false); signInAsAdminWithGoogle(); }} style={STAFF_ITEM_STYLE}>
+                          כניסת אדמין
+                        </button>
+                        <button type="button" onClick={() => { setShowSiteMenu(false); setAdminLoginError(""); setShowAdminEmailLogin(true); }} style={STAFF_ITEM_STYLE}>
+                          כניסה עם אימייל
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => setShowStaffLogin(true)} style={STAFF_ITEM_STYLE}>
+                        כניסת צוות
+                      </button>
+                    ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {isAdmin &&
@@ -763,6 +766,7 @@ export default function App() {
           document.body
         )}
 
+      {isAdmin && (
       <div
         style={{
           position: "sticky",
@@ -831,9 +835,10 @@ export default function App() {
           )}
         </div>
       </div>
+      )}
 
       <div>
-        {screen === "customer" && (
+        {activeScreen === "customer" && (
           <CustomerScreen
             soldOut={soldOut}
             customerName={customerName}
@@ -849,10 +854,11 @@ export default function App() {
             onSubmitReview={submitOrderReview}
             menuRatingsByItemId={menuRatingsByItemId}
             menuItemReviewsById={menuItemReviewsById}
+            onOpenPrivacy={() => setShowPrivacy(true)}
           />
         )}
 
-        {screen === "cashier" &&
+        {activeScreen === "cashier" &&
           (isAdmin ? (
             <CashierScreen
               orders={firebaseOrders}
@@ -873,7 +879,7 @@ export default function App() {
             </div>
           ))}
 
-        {screen === "kitchen" &&
+        {activeScreen === "kitchen" &&
           (isAdmin ? (
             <KitchenScreen
               orders={firebaseOrders}
@@ -895,7 +901,7 @@ export default function App() {
             </div>
           ))}
 
-        {screen === "analytics" &&
+        {activeScreen === "analytics" &&
           (isAdmin ? (
             <AnalyticsScreen />
           ) : (
@@ -904,7 +910,7 @@ export default function App() {
             </div>
           ))}
 
-        {screen === "inventory" &&
+        {activeScreen === "inventory" &&
           (isAdmin ? (
             <InventoryScreen soldOut={soldOut} />
           ) : (
@@ -913,7 +919,7 @@ export default function App() {
             </div>
           ))}
 
-        {screen === "delivery" &&
+        {activeScreen === "delivery" &&
           (isAdmin ? (
             <DeliveryScreen orders={firebaseOrders} />
           ) : (
@@ -922,6 +928,53 @@ export default function App() {
             </div>
           ))}
       </div>
+
+      {(showCerts || showPrivacy) &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            onClick={() => { setShowCerts(false); setShowPrivacy(false); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 40 }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: "100%", maxWidth: showCerts ? 760 : 520, maxHeight: "88vh", overflowY: "auto", background: "white", borderRadius: 22, padding: isMobile ? "16px 14px" : "18px 20px", display: "grid", gap: 12, direction: "rtl", textAlign: "right", color: "#0f172a" }}
+            >
+              {showCerts ? (
+                <>
+                  <div style={{ fontWeight: 900, fontSize: 19 }}>📜 תעודות כשרות ואישור הרב</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 10 }}>
+                    {["/KosherM.png", "/KosherH.jpg", "/Rav.png"].map((src) => (
+                      <a key={src} href={src} target="_blank" rel="noreferrer">
+                        <img src={src} alt="תעודת כשרות" style={{ width: "100%", borderRadius: 12, border: "1px solid #e2e8f0", background: "white" }} />
+                      </a>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 900, fontSize: 19 }}>🔒 מדיניות פרטיות</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.7, display: "grid", gap: 8 }}>
+                    <p style={{ margin: 0 }}>הפודטראק "הנחשוניה" הוא יוזמה פרטית. בעת הזמנה באתר נאספים הפרטים הבאים: שם, פרטי ההזמנה, ובהזמנת משלוח גם טלפון, יישוב וכתובת.</p>
+                    <p style={{ margin: 0 }}><b>מטרה:</b> הכנת ההזמנה, מסירתה או משלוחה, ויצירת קשר בנוגע להזמנה בלבד. המידע לא משמש לפרסום ולא נמכר.</p>
+                    <p style={{ margin: 0 }}><b>חובה למסור?</b> אין חובה לפי חוק. בלי שם (ובמשלוח בלי טלפון וכתובת) לא נוכל לטפל בהזמנה.</p>
+                    <p style={{ margin: 0 }}><b>מי רואה את המידע:</b> צוות הפודטראק בלבד. המידע נשמר בשירותי הענן של Google (Firebase), שמשמשים לנו לאחסון.</p>
+                    <p style={{ margin: 0 }}><b>האחראי על המידע:</b> מפעיל הפודטראק. אפשר לפנות אלינו דרך "צור קשר" בתפריט.</p>
+                    <p style={{ margin: 0 }}><b>הזכויות שלכם:</b> אפשר לבקש לעיין במידע שנשמר עליכם, לתקן אותו או למחוק אותו, בפנייה דרך "צור קשר".</p>
+                  </div>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => { setShowCerts(false); setShowPrivacy(false); }}
+                style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #cbd5e1", background: "white", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                סגור
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {showContacts &&
         typeof document !== "undefined" &&
