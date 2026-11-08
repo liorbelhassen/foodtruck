@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
 import { ALL_TOPPINGS, DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
 
@@ -300,3 +301,172 @@ export function statusPill(status) {
     color: s.color,
   };
 }
+
+export const STAFF = {
+  bg: "#fbf7f1",
+  ink: "#2b2118",
+  muted: "#8a7b6c",
+  accent: "#e2552a",
+  accentSoft: "#fdeee6",
+  accentInk: "#c2410c",
+  line: "#ecdfd0",
+  soft: "#f4ece2",
+  ok: "#047857",
+  okSoft: "#ecfdf5",
+  bad: "#b91c1c",
+  badSoft: "#fef2f2",
+  warn: "#b45309",
+  warnSoft: "#fffbeb",
+  del: "#3730a3",
+  delSoft: "#eef2ff",
+};
+
+export const PAYMENT_LABELS = { cash: "💵 מזומן", bit: "Bit", paybox: "PayBox" };
+
+export function staffChip(tone = "neutral") {
+  const tones = {
+    neutral: [STAFF.soft, STAFF.ink],
+    ok: [STAFF.okSoft, STAFF.ok],
+    bad: [STAFF.badSoft, STAFF.bad],
+    warn: [STAFF.warnSoft, STAFF.warn],
+    accent: [STAFF.accentSoft, STAFF.accentInk],
+    del: [STAFF.delSoft, STAFF.del],
+  };
+  const [background, color] = tones[tone] || tones.neutral;
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 9px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 800,
+    background,
+    color,
+    whiteSpace: "nowrap",
+  };
+}
+
+export function staffBtn(kind = "accent", big = false) {
+  const kinds = {
+    accent: { background: STAFF.accent, color: "white", border: "none" },
+    ok: { background: STAFF.ok, color: "white", border: "none" },
+    ghost: { background: "white", color: STAFF.ink, border: `1.5px solid ${STAFF.line}` },
+    danger: { background: STAFF.badSoft, color: STAFF.bad, border: "1px solid #fecaca" },
+  };
+  return {
+    ...(kinds[kind] || kinds.accent),
+    padding: big ? "14px 16px" : "9px 14px",
+    borderRadius: 14,
+    fontWeight: 900,
+    fontSize: big ? 18 : 14,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+}
+
+export function staffRootStyle(height) {
+  return {
+    height,
+    boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
+    background: STAFF.bg,
+    color: STAFF.ink,
+    borderRadius: 18,
+    border: `1px solid ${STAFF.line}`,
+    overflow: "hidden",
+    direction: "rtl",
+    textAlign: "right",
+    position: "relative",
+  };
+}
+
+export function staffSubbarStyle() {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderBottom: `1px solid ${STAFF.line}`,
+    background: "white",
+    flexWrap: "wrap",
+  };
+}
+
+export function orderTypeText(order) {
+  if (order?.deliveryTime) return `🛵 ${order.deliveryCity || "משלוח"} · ${order.deliveryTime}`;
+  return `🏪 איסוף${order?.pickupTime ? ` · ${order.pickupTime}` : ""}`;
+}
+
+const staffDrinkLabelByKey = Object.fromEntries(ALL_DRINKS.map((d) => [d.key, d.label]));
+
+function itemDetailsText({ label, mods, showToppings, drink }) {
+  const toppings = modsKeysToDisplayLabels(mods);
+  const parts = [];
+  if (showToppings) parts.push(toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות");
+  if (drink) parts.push(`🥤 ${drink}`);
+  if (parts.length === 0) return null;
+  return `${label ? `${label}: ` : ""}${parts.join(" · ")}`;
+}
+
+export function orderItemLines(item) {
+  if (Array.isArray(item?.familyMeals)) {
+    return item.familyMeals
+      .map((meal, idx) =>
+        itemDetailsText({
+          label: `מנה ${meal?.mealNumber || idx + 1}`,
+          mods: meal?.mods,
+          showToppings: true,
+          drink: meal?.drinkLabel || staffDrinkLabelByKey[meal?.drinkKey],
+        })
+      )
+      .filter(Boolean);
+  }
+  const line = itemDetailsText({
+    mods: item?.mods,
+    showToppings: !!item?.allowsToppings || modsKeysToDisplayLabels(item?.mods).length > 0,
+    drink:
+      item?.drinkLabel ||
+      staffDrinkLabelByKey[item?.drinkKey] ||
+      staffDrinkLabelByKey[item?.drinkType],
+  });
+  return line ? [line] : [];
+}
+
+export function minutesSince(value, nowMs = Date.now()) {
+  const ms = typeof value === "number" ? value : value?.toMillis?.() ?? (value?.seconds != null ? value.seconds * 1000 : null);
+  if (ms == null) return null;
+  return Math.max(0, Math.floor((nowMs - ms) / 60000));
+}
+
+export function useStaffViewport() {
+  const ref = useRef(null);
+  const [state, setState] = useState(() => ({
+    height: 600,
+    isMobile: typeof window !== "undefined" && window.innerWidth <= 900,
+  }));
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el) return;
+      const isMobile = window.innerWidth <= 900;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const height = Math.max(420, Math.floor(window.innerHeight - top - (isMobile ? 18 : 20)));
+      setState((prev) => (prev.height === height && prev.isMobile === isMobile ? prev : { isMobile, height }));
+    };
+    measure();
+    const frame = requestAnimationFrame(measure);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  return { ref, ...state };
+}
+

@@ -75,7 +75,8 @@ test("pickup order: customer → cashier → kitchen (with toppings) → deliver
   await admin.getByRole("button", { name: "נמסר", exact: true }).first().click();
   await expect(admin.getByRole("button", { name: "סיימתי להכין" })).toHaveCount(0);
   await expect(admin.getByRole("button", { name: "נמסר", exact: true })).toHaveCount(0);
-  // Delivered orders move to the kitchen history table, still showing toppings.
+  // Delivered orders move to the kitchen history view, still showing toppings.
+  await admin.getByRole("button", { name: /^נמסרו/ }).click();
   await expect(kitchenItem.first()).toBeVisible();
 });
 

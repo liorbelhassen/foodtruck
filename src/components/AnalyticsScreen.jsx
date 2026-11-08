@@ -8,35 +8,56 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { StaffPills } from "./uiHelpers.jsx";
 import {
-  LogoHeader,
-  SectionTitle,
-} from "./uiHelpers.jsx";
-import {
-  chartBoxStyle,
   formatDurationMs,
-  screenCardStyle,
+  menu,
+  STAFF,
+  staffBtn,
+  staffRootStyle,
+  staffSubbarStyle,
+  useStaffViewport,
 } from "./uiHelpersUtils.jsx";
+import { getDisplayItemName } from "./customer/customerHelpers.js";
 import { fetchOrdersForDate, fetchOrderDatesWithData } from "../services/orders.js";
 import { toMillis } from "../utils/timeUtils.js";
 
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 
-function StatCard({ label, value }) {
+const MENU_NAME_BY_ID = Object.fromEntries(
+  menu.map((m) => [m.id, m.id === 6 ? "פחית" : m.id === 8 ? "בקבוק קטן" : getDisplayItemName(m.name)])
+);
+
+function HBars({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.value));
   return (
-    <div
-      style={{
-        background: "white",
-        border: "1px solid #e5e7eb",
-        borderRadius: "20px",
-        padding: "16px",
-        boxShadow: "0 10px 24px rgba(15,23,42,0.05)",
-      }}
-    >
-      <div style={{ color: "#6b7280", marginBottom: "6px", fontSize: "14px" }}>{label}</div>
-      <div style={{ fontWeight: 900, fontSize: "28px", color: "#111827" }}>{value}</div>
+    <div style={{ display: "grid", gap: 9 }}>
+      {rows.map((r) => (
+        <div key={r.label} style={{ display: "grid", gridTemplateColumns: "minmax(80px, 140px) 1fr auto", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700 }}>
+          <span>{r.label}</span>
+          <div style={{ height: 10, borderRadius: 99, background: STAFF.soft, overflow: "hidden" }}>
+            <div style={{ width: `${(r.value / max) * 100}%`, height: "100%", background: STAFF.accent, borderRadius: 99 }} />
+          </div>
+          <span style={{ color: STAFF.muted, fontSize: 12, whiteSpace: "nowrap" }}>{r.note}</span>
+        </div>
+      ))}
     </div>
   );
+}
+
+function Panel({ title, children }) {
+  return (
+    <div style={{ background: "white", border: `1px solid ${STAFF.line}`, borderRadius: 16, padding: 12, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
+      <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function formatDateLabel(dateKey, todayKey) {
+  if (dateKey === todayKey) return "היום";
+  const [, month, day] = dateKey.split("-");
+  return `${day}.${month}`;
 }
 
 function downloadCsv(filename, rows) {
@@ -240,6 +261,22 @@ export default function AnalyticsScreen() {
     [filteredOrders]
   );
 
+  const { ref, height, isMobile } = useStaffViewport();
+
+  const topItems = useMemo(() => {
+    const counts = {};
+    filteredOrders.forEach((order) =>
+      (order.items || []).forEach((item) => {
+        const name = MENU_NAME_BY_ID[item?.id] || getDisplayItemName(item?.name) || "אחר";
+        counts[name] = (counts[name] || 0) + 1;
+      })
+    );
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([label, value]) => ({ label, value, note: String(value) }));
+  }, [filteredOrders]);
+
   const exportShiftToCsv = () => {
     const rows = [
       ["Date Key", selectedDateKey],
@@ -292,260 +329,101 @@ export default function AnalyticsScreen() {
     downloadCsv(`orders-report-${selectedDateKey}.csv`, rows);
   };
 
+  const recentDates = [...new Set([todayDateKey, ...datesWithData])].slice(0, 6);
+  const kpis = [
+    ['סה"כ הזמנות', filteredOrders.length],
+    ["סה״כ הכנסות", `₪${totalRevenue.toLocaleString()}`],
+    ["זמן הכנה ממוצע", avgPrep],
+    ["שיא עומס", peakWindow],
+    ["מוכנות/נמסרו", readyOrDeliveredCount],
+    ["ממוצע להזמנה", filteredOrders.length ? `₪${Math.round(totalRevenue / filteredOrders.length)}` : "--"],
+  ];
+  const pct = (n) => (filteredOrders.length ? Math.round((n / filteredOrders.length) * 100) : 0);
+
   return (
-    <div style={screenCardStyle()}>
-      <LogoHeader compact />
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "12px",
-          flexWrap: "wrap",
-          marginBottom: "18px",
-        }}
-      >
-        <SectionTitle
-          title="דוח עומסים והכנסות"
-          subtitle="נתוני אמת מפיירבייס לפי ההזמנות שנשמרו במערכת"
+    <div ref={ref} style={staffRootStyle(height)}>
+      <div style={staffSubbarStyle()}>
+        <b style={{ fontSize: 16 }}>📊 דוחות</b>
+        <StaffPills
+          options={recentDates.map((key) => ({ key, label: formatDateLabel(key, todayDateKey) }))}
+          value={selectedDateKey}
+          onChange={setSelectedDateKey}
         />
-
-        <button
-          onClick={exportShiftToCsv}
-          style={{
-            padding: "12px 14px",
-            borderRadius: "16px",
-            border: "none",
-            background: "linear-gradient(135deg, #111827 0%, #2563eb 100%)",
-            color: "white",
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
-        >
-          ייצוא CSV ל-Google Sheets
-        </button>
-      </div>
-
-      <div
-        style={{
-          ...chartBoxStyle(),
-          marginBottom: "16px",
-          padding: "12px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            alignItems: "center",
-            flexWrap: "wrap",
-            marginBottom: "10px",
-          }}
-        >
-          <label htmlFor="analytics-date-picker" style={{ fontWeight: 800, color: "#111827" }}>
-            תאריך דוח:
-          </label>
-          <input
-            id="analytics-date-picker"
-            type="date"
-            value={selectedDateKey}
-            max={todayDateKey}
-            onChange={(e) => setSelectedDateKey(e.target.value)}
-            style={{
-              border: "1px solid #d1d5db",
-              borderRadius: "10px",
-              padding: "8px 10px",
-              fontWeight: 700,
-              color: "#111827",
-              background: "white",
-            }}
-          />
-          <button
-            onClick={() => setSelectedDateKey(todayDateKey)}
-            style={{
-              border: "1px solid #d1d5db",
-              background: "#f8fafc",
-              color: "#0f172a",
-              borderRadius: "10px",
-              padding: "8px 12px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            היום
-          </button>
-          <button
-            onClick={() => setRefreshToken((token) => token + 1)}
-            style={{
-              border: "1px solid #d1d5db",
-              background: "#f8fafc",
-              color: "#0f172a",
-              borderRadius: "10px",
-              padding: "8px 12px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            רענן
-          </button>
-        </div>
-
-        <div style={{ color: "#475569", fontSize: "13px", marginBottom: "8px" }}>
-          ימים עם נתונים:
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-          {datesWithData.length === 0 ? (
-            <span style={{ color: "#6b7280", fontSize: "13px" }}>אין ימים עם נתונים</span>
-          ) : (
-            datesWithData.map((dateKey) => (
-              <button
-                key={dateKey}
-                onClick={() => setSelectedDateKey(dateKey)}
-                style={{
-                  border: dateKey === selectedDateKey ? "2px solid #0f766e" : "1px solid #cbd5e1",
-                  background: dateKey === selectedDateKey ? "#ecfeff" : "white",
-                  color: "#0f172a",
-                  borderRadius: "999px",
-                  padding: "6px 10px",
-                  fontWeight: 700,
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-                title="יש הזמנות בתאריך זה"
-              >
-                {dateKey}
-              </button>
-            ))
-          )}
+        <input
+          id="analytics-date-picker"
+          aria-label="תאריך דוח"
+          type="date"
+          value={selectedDateKey}
+          max={todayDateKey}
+          onChange={(e) => e.target.value && setSelectedDateKey(e.target.value)}
+          style={{ border: `1.5px solid ${STAFF.line}`, borderRadius: 10, padding: "5px 8px", fontWeight: 700, color: STAFF.ink, background: "white", fontFamily: "inherit" }}
+        />
+        <div style={{ marginInlineStart: "auto", display: "flex", gap: 6 }}>
+          <button type="button" onClick={() => setRefreshToken((token) => token + 1)} style={{ ...staffBtn("ghost"), padding: "6px 12px" }}>↻ רענן</button>
+          <button type="button" onClick={exportShiftToCsv} style={{ ...staffBtn("accent"), padding: "6px 12px" }}>⬇ ייצוא CSV</button>
         </div>
       </div>
 
       {loading ? (
-        <div style={{ color: "#6b7280", padding: "8px 0 14px" }}>טוען נתונים מפיירבייס...</div>
+        <div style={{ color: STAFF.muted, padding: 16 }}>טוען נתונים מפיירבייס...</div>
       ) : filteredOrders.length === 0 ? (
-        <div style={{ color: "#6b7280", padding: "8px 0 14px" }}>אין נתונים להצגה כרגע</div>
+        <div style={{ color: STAFF.muted, padding: 16 }}>אין נתונים להצגה בתאריך הזה</div>
       ) : (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "12px",
-              marginBottom: "20px",
-            }}
-          >
-            <StatCard label='סה"כ הזמנות' value={filteredOrders.length} />
-            <StatCard label="הזמנות מוכנות/נמסרו" value={readyOrDeliveredCount} />
-            <StatCard label="זמן הכנה ממוצע" value={avgPrep} />
-            <StatCard label="שיא עומס" value={peakWindow} />
-          </div>
-
-          <div
-            style={{
-              marginBottom: "20px",
-              background: "white",
-              border: "1px solid #e5e7eb",
-              borderRadius: "22px",
-              padding: "18px",
-              boxShadow: "0 14px 30px rgba(15,23,42,0.06)",
-              direction: "rtl",
-              textAlign: "right",
-            }}
-          >
-            <div style={{ color: "#475569", fontWeight: 800, fontSize: "14px", marginBottom: "12px" }}>
-              משלוח מול איסוף עצמי
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-              <div style={{ background: "#fef3c7", border: "2px solid #f59e0b", borderRadius: "14px", padding: "14px 16px" }}>
-                <div style={{ fontSize: "13px", color: "#92400e", fontWeight: 700, marginBottom: "4px" }}>🛵 משלוח</div>
-                <div style={{ fontSize: "32px", fontWeight: 900, color: "#78350f" }}>{deliveryCount}</div>
-                <div style={{ fontSize: "12px", color: "#92400e", fontWeight: 600, marginTop: "2px" }}>
-                  {filteredOrders.length > 0 ? Math.round((deliveryCount / filteredOrders.length) * 100) : 0}% מסך ההזמנות
-                </div>
-                <div style={{ fontSize: "15px", color: "#78350f", fontWeight: 900, marginTop: "6px" }}>
-                  ₪{deliveryRevenue}
-                </div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: isMobile ? "auto" : "hidden",
+            padding: 10,
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: isMobile ? "1fr" : "220px 1fr 1fr",
+            gridTemplateRows: isMobile ? "none" : "minmax(0, 1fr) minmax(0, 1fr)",
+            gridAutoRows: isMobile ? "max-content" : undefined,
+          }}
+        >
+          <div style={{ gridRow: isMobile ? "auto" : "span 2", display: "grid", gap: 8, gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "1fr" }}>
+            {kpis.map(([label, value]) => (
+              <div key={label} style={{ background: "white", border: `1px solid ${STAFF.line}`, borderRadius: 14, padding: "8px 12px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}>
+                <span style={{ fontSize: 12, color: STAFF.muted, fontWeight: 700 }}>{label}</span>
+                <b style={{ fontSize: isMobile ? 17 : 22 }}>{value}</b>
               </div>
-              <div style={{ background: "#f0fdf4", border: "2px solid #86efac", borderRadius: "14px", padding: "14px 16px" }}>
-                <div style={{ fontSize: "13px", color: "#166534", fontWeight: 700, marginBottom: "4px" }}>🏪 איסוף עצמי</div>
-                <div style={{ fontSize: "32px", fontWeight: 900, color: "#14532d" }}>{pickupCount}</div>
-                <div style={{ fontSize: "12px", color: "#166534", fontWeight: 600, marginTop: "2px" }}>
-                  {filteredOrders.length > 0 ? Math.round((pickupCount / filteredOrders.length) * 100) : 0}% מסך ההזמנות
-                </div>
-                <div style={{ fontSize: "15px", color: "#14532d", fontWeight: 900, marginTop: "6px" }}>
-                  ₪{pickupRevenue}
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
-
-          <div
-            style={{
-              marginBottom: "20px",
-              background: "white",
-              border: "1px solid #e5e7eb",
-              borderRadius: "22px",
-              padding: "18px",
-              boxShadow: "0 14px 30px rgba(15,23,42,0.06)",
-              direction: "rtl",
-              textAlign: "right",
-            }}
-          >
-            <div style={{ color: "#475569", fontWeight: 800, fontSize: "14px", marginBottom: "6px" }}>
-              סה״כ הכנסות
-            </div>
-            <div style={{ fontWeight: 900, fontSize: "40px", color: "#0f172a", marginBottom: "14px", lineHeight: 1.1 }}>
-              ₪{totalRevenue}
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: "8px",
-              }}
-            >
-              {[
-                { label: "מזומן", value: paymentTotals.cash },
-                { label: "Bit", value: paymentTotals.bit },
-                { label: "PayBox", value: paymentTotals.paybox },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  style={{
-                    border: "1px solid #e2e8f0",
-                    background: "#f8fafc",
-                    borderRadius: "14px",
-                    padding: "10px 12px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <span style={{ color: "#64748b", fontWeight: 700, fontSize: "13px" }}>{item.label}</span>
-                  <span style={{ color: "#111827", fontWeight: 900, fontSize: "16px" }}>₪{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={chartBoxStyle()}>
-            <div style={{ fontWeight: 800, marginBottom: "10px" }}>מספר הזמנות בכל חלון זמן</div>
-            <div style={{ width: "100%", height: 320 }}>
-              <ResponsiveContainer>
+          <Panel title="מספר הזמנות בכל רבע שעה">
+            <div style={{ flex: 1, minHeight: isMobile ? 200 : 0, height: isMobile ? 200 : undefined }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="time" />
-                  <YAxis allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="time" fontSize={11} />
+                  <YAxis allowDecimals={false} fontSize={11} width={28} />
                   <Tooltip />
-                  <Bar dataKey="orders" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="orders" name="הזמנות" fill={STAFF.accent} radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
-        </>
+          </Panel>
+          <Panel title="הכנסות לפי אמצעי תשלום">
+            <HBars
+              rows={[
+                { label: "💵 מזומן", value: paymentTotals.cash, note: `₪${paymentTotals.cash}` },
+                { label: "Bit", value: paymentTotals.bit, note: `₪${paymentTotals.bit}` },
+                { label: "PayBox", value: paymentTotals.paybox, note: `₪${paymentTotals.paybox}` },
+              ]}
+            />
+          </Panel>
+          <Panel title="משלוח מול איסוף עצמי">
+            <HBars
+              rows={[
+                { label: "🛵 משלוח", value: deliveryCount, note: `${deliveryCount} (${pct(deliveryCount)}%) · ₪${deliveryRevenue}` },
+                { label: "🏪 איסוף עצמי", value: pickupCount, note: `${pickupCount} (${pct(pickupCount)}%) · ₪${pickupRevenue}` },
+              ]}
+            />
+          </Panel>
+          <Panel title="הנמכרים ביותר">
+            <HBars rows={topItems} />
+          </Panel>
+        </div>
       )}
     </div>
   );
