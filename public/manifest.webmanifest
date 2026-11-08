@@ -1,6 +1,6 @@
 {
-  "name": "הבשוניה - Foodtruck",
-  "short_name": "הבשוניה",
+  "name": "הנחשוניה | אוכלים טוב, עושים טוב!",
+  "short_name": "הנחשוניה",
   "description": "הזמנת אוכל מהפודטראק",
   "lang": "he",
   "dir": "rtl",
@@ -11,7 +11,7 @@
   "theme_color": "#0f766e",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/app-icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

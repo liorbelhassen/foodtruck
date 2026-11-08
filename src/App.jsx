@@ -492,7 +492,11 @@ export default function App() {
         }}
       >
         <img src="/logo.png" alt="הנחשוניה" style={{ height: 42, width: 42, borderRadius: "50%", objectFit: "cover" }} />
-        <span style={{ fontWeight: 900, fontSize: 18, color: "#f39a3d" }}>הנחשוניה</span>
+        <span style={{ fontWeight: 900, fontSize: isMobile ? 16 : 18, color: "#f39a3d", lineHeight: 1.25 }}>
+          הנחשוניה
+          {isMobile ? <br /> : " | "}
+          <span style={{ color: "#f3e3cf", fontWeight: 700, fontSize: isMobile ? 12.5 : 16 }}>בני דקלים | אוכלים טוב, עושים טוב!</span>
+        </span>
         <div style={{ marginInlineStart: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {isAdmin && (
           <button
