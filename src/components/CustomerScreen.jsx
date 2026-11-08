@@ -108,6 +108,22 @@ function getDrinkOptionsForItem(item) {
   return DRINK_OPTIONS;
 }
 
+// Meals include a can; a small bottle can be chosen instead for the price difference.
+const MEAL_DRINK_OPTIONS = [...DRINK_OPTIONS, ...EXTRA_DRINK_OPTIONS];
+const CAN_PRICE = menu.find((item) => isStandaloneDrinkItem(item) && !isExtraDrinkItem(item))?.price ?? 0;
+const BOTTLE_PRICE = menu.find(isExtraDrinkItem)?.price ?? CAN_PRICE;
+const BOTTLE_DRINK_KEYS = new Set(EXTRA_DRINK_OPTIONS.map((drink) => drink.key));
+
+function mealDrinkSurcharge(drinkKey) {
+  return BOTTLE_DRINK_KEYS.has(drinkKey) ? Math.max(0, BOTTLE_PRICE - CAN_PRICE) : 0;
+}
+
+function mealDrinkChoiceLabel(drink, isSoldOut) {
+  if (isSoldOut) return `${drink.label} (חסר)`;
+  const surcharge = mealDrinkSurcharge(drink.key);
+  return surcharge ? `${drink.label} +₪${surcharge}` : drink.label;
+}
+
 function createInitialFamilyMealsConfig() {
   return Array.from({ length: 4 }, () => ({
     mods: [],
@@ -678,13 +694,13 @@ export default function CustomerScreen({
 
       <div style={kioskSheetTitleStyle}>שתיה למנה {activeFamilyMeal + 1}</div>
       <div style={kioskChoiceGridStyle}>
-        {DRINK_OPTIONS.map((drink) => {
+        {MEAL_DRINK_OPTIONS.map((drink) => {
           const drinkSoldOut = soldOut[drinkStockKey(drink.key)] === true;
           return (
             <KioskChoice
               key={`family-drink-${activeFamilyMeal}-${drink.key}`}
               imageSrc={drink.imageSrc}
-              label={drinkSoldOut ? `${drink.label} (חסר)` : drink.label}
+              label={mealDrinkChoiceLabel(drink, drinkSoldOut)}
               active={activeFamilyMealConfig.drinkKey === drink.key}
               disabled={drinkSoldOut}
               onClick={() => chooseFamilyDrink(drink.key)}
@@ -697,7 +713,7 @@ export default function CustomerScreen({
         מנה {activeFamilyMeal + 1}:{" "}
         {kioskMealSummary(
           activeFamilyMealConfig.mods,
-          DRINK_OPTIONS.find((d) => d.key === activeFamilyMealConfig.drinkKey)?.label || "בחרו שתיה"
+          MEAL_DRINK_OPTIONS.find((d) => d.key === activeFamilyMealConfig.drinkKey)?.label || "בחרו שתיה"
         )}
       </div>
 
@@ -708,7 +724,9 @@ export default function CustomerScreen({
       )}
 
       <button type="button" onClick={() => handleConfirmFamily()} style={kioskCtaStyle(true)}>
-        הוספה להזמנה · ₪{familyDealItem?.price ?? ""}
+        הוספה להזמנה · ₪
+        {(familyDealItem?.price ?? 0) +
+          familyMealConfigs.reduce((sum, meal) => sum + mealDrinkSurcharge(meal.drinkKey), 0)}
       </button>
     </KioskSheet>
   ) : null;
@@ -1257,7 +1275,7 @@ export default function CustomerScreen({
     }
 
     const configuredMeals = familyMealConfigs.map((meal, idx) => {
-      const drink = DRINK_OPTIONS.find((d) => d.key === meal.drinkKey);
+      const drink = MEAL_DRINK_OPTIONS.find((d) => d.key === meal.drinkKey);
       return {
         mealNumber: idx + 1,
         mods: [...meal.mods],
@@ -1277,6 +1295,9 @@ export default function CustomerScreen({
       ...cart,
       {
         ...familyDealItem,
+        price:
+          familyDealItem.price +
+          configuredMeals.reduce((sum, meal) => sum + mealDrinkSurcharge(meal.drinkKey), 0),
         allowsToppings: false,
         mods: [`family:${signature}`],
         familyMeals: configuredMeals,
@@ -1327,12 +1348,13 @@ export default function CustomerScreen({
     const mods = sheetItem.allowsToppings ? [...sheetMods] : [];
 
     if (sheetNeedsDrink) {
-      const drink = DRINK_OPTIONS.find((d) => d.key === sheetDrink);
+      const drink = MEAL_DRINK_OPTIONS.find((d) => d.key === sheetDrink);
       if (!drink || soldOut[drinkStockKey(drink.key)]) return;
       setCart([
         ...cart,
         {
           ...sheetItem,
+          price: sheetItem.price + mealDrinkSurcharge(drink.key),
           name: replaceDrinkInName(getDisplayItemName(sheetItem.name), drink.label),
           drinkType: drink.key,
           mods,
@@ -1482,13 +1504,13 @@ export default function CustomerScreen({
         <>
           <div style={kioskSheetTitleStyle}>שתיה לארוחה</div>
           <div style={kioskChoiceGridStyle}>
-            {DRINK_OPTIONS.map((drink) => {
+            {MEAL_DRINK_OPTIONS.map((drink) => {
               const drinkSoldOut = soldOut[drinkStockKey(drink.key)] === true;
               return (
                 <KioskChoice
                   key={`sheet-drink-${drink.key}`}
                   imageSrc={drink.imageSrc}
-                  label={drinkSoldOut ? `${drink.label} (חסר)` : drink.label}
+                  label={mealDrinkChoiceLabel(drink, drinkSoldOut)}
                   active={sheetDrink === drink.key}
                   disabled={drinkSoldOut}
                   onClick={() => setSheetDrink(drink.key)}
@@ -1502,7 +1524,7 @@ export default function CustomerScreen({
       <div style={kioskSummaryLineStyle}>
         {kioskMealSummary(
           sheetMods,
-          sheetNeedsDrink ? DRINK_OPTIONS.find((d) => d.key === sheetDrink)?.label || "בחרו שתיה" : null
+          sheetNeedsDrink ? MEAL_DRINK_OPTIONS.find((d) => d.key === sheetDrink)?.label || "בחרו שתיה" : null
         )}
       </div>
 
@@ -1512,7 +1534,7 @@ export default function CustomerScreen({
         onClick={confirmItemSheet}
         style={kioskCtaStyle(!(sheetNeedsDrink && !sheetDrink))}
       >
-        {sheetNeedsDrink && !sheetDrink ? "בחרו שתיה כדי להוסיף" : `הוספה להזמנה · ₪${sheetItem.price}`}
+        {sheetNeedsDrink && !sheetDrink ? "בחרו שתיה כדי להוסיף" : `הוספה להזמנה · ₪${sheetItem.price + mealDrinkSurcharge(sheetDrink)}`}
       </button>
     </KioskSheet>
   ) : null;
