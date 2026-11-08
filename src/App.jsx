@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CustomerScreen from "./components/CustomerScreen.jsx";
 import InventoryScreen from "./components/InventoryScreen.jsx";
-import { subscribeToInventory } from "./services/inventory.js";
+import { consumeStockInFirebase, subscribeToInventory } from "./services/inventory.js";
 import { DELIVERY_FEES_BY_CITY } from "./components/customer/customerConstants.js";
 import CashierScreen from "./components/CashierScreen.jsx";
 import KitchenScreen from "./components/KitchenScreen.jsx";
@@ -44,26 +44,31 @@ import {
 
 const STORAGE_KEY = "foodtruck-shifts-v1";
 
-function navBtn(active, compact = false) {
+function navBtn(active) {
   return {
-    padding: compact ? "11px 16px" : "13px 18px",
-    borderRadius: "18px",
-    border: active ? "none" : "1px solid #d7e3df",
-    background: active
-      ? "linear-gradient(135deg, #0f766e 0%, #f59e0b 100%)"
-      : "rgba(255,255,255,0.92)",
-    color: active ? "white" : "#0f172a",
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: active ? "1.5px solid #e2552a" : "1.5px solid #ecdfd0",
+    background: active ? "#e2552a" : "white",
+    color: active ? "white" : "#2b2118",
     cursor: "pointer",
     fontWeight: 800,
-    fontSize: compact ? "14px" : "15px",
-    minWidth: compact ? 96 : 110,
-    boxShadow: active
-      ? "0 16px 32px rgba(15,118,110,0.20)"
-      : "0 10px 24px rgba(15,23,42,0.06)",
-    transition: "all 0.2s ease",
-    backdropFilter: "blur(8px)",
+    fontSize: "14px",
     whiteSpace: "nowrap",
+    fontFamily: "inherit",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
+}
+
+function navBadge(count) {
+  if (!count) return null;
+  return (
+    <span aria-hidden="true" style={{ background: "#2b2118", color: "white", borderRadius: 999, fontSize: 11, padding: "1px 7px" }}>
+      {count}
+    </span>
+  );
 }
 
 function authBtnStyle(primary = false, compact = false) {
@@ -100,6 +105,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [soldOut, setSoldOut] = useState({});
+  const [inventory, setInventory] = useState({ soldOut: {}, qty: {} });
   const [showAdminEmailLogin, setShowAdminEmailLogin] = useState(false);
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
@@ -188,7 +194,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = subscribeToInventory(setSoldOut);
+    const unsubscribe = subscribeToInventory((effectiveSoldOut, raw) => {
+      setSoldOut(effectiveSoldOut);
+      setInventory(raw);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -321,6 +330,8 @@ export default function App() {
 
   const sendToKitchen = async (id) => {
     await sendToKitchenInFirebase(id);
+    const order = firebaseOrders.find((o) => o.id === id);
+    if (order) consumeStockInFirebase(order.items).catch((err) => console.error("Stock update failed:", err));
   };
 
   const markReady = async (id) => {
@@ -507,7 +518,7 @@ export default function App() {
 
         {user && !user.isAnonymous && (
           <>
-            <span
+            {!isMobile && <span
               style={{
                 padding: isDesktop ? "8px 12px" : "9px 14px",
                 borderRadius: "999px",
@@ -522,7 +533,7 @@ export default function App() {
               }}
             >
               {user.email}
-            </span>
+            </span>}
             <button onClick={logout} style={authBtnStyle(false, isDesktop)}>
               התנתק
             </button>
@@ -767,74 +778,36 @@ export default function App() {
         )}
 
       {isAdmin && (
-      <div
-        style={{
-          position: "sticky",
-          top: isMobile ? 8 : 10,
-          zIndex: 12,
-          display: "flex",
-          justifyContent: "center",
-          marginBottom: isDesktop ? 10 : 12,
-        }}
-      >
         <div
           style={{
             display: "flex",
-            gap: isDesktop ? 8 : 10,
-            flexWrap: isMobile ? "nowrap" : "wrap",
-            justifyContent: "center",
+            gap: 6,
+            justifyContent: isMobile ? "flex-start" : "center",
             alignItems: "center",
-            width: "100%",
-            maxWidth: isDesktop ? 700 : 760,
-            padding: isDesktop ? "7px" : "9px",
-            borderRadius: "18px",
-            background: "rgba(255,255,255,0.75)",
-            border: "1px solid rgba(219,231,228,0.9)",
-            boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
-            backdropFilter: "blur(10px)",
-            overflowX: isMobile ? "auto" : "visible",
+            padding: 6,
+            marginBottom: 8,
+            borderRadius: 16,
+            background: "white",
+            border: "1px solid #ecdfd0",
+            overflowX: "auto",
+            scrollbarWidth: "none",
           }}
         >
-          <button
-            onClick={() => setScreen("customer")}
-            style={navBtn(screen === "customer", isDesktop)}
-          >
-            לקוח
-          </button>
-          <button
-            onClick={() => setScreen("cashier")}
-            style={navBtn(screen === "cashier", isDesktop)}
-          >
-            קופאי
-          </button>
-          <button
-            onClick={() => setScreen("kitchen")}
-            style={navBtn(screen === "kitchen", isDesktop)}
-          >
-            מטבח
-          </button>
-          <button
-            onClick={() => setScreen("analytics")}
-            style={navBtn(screen === "analytics", isDesktop)}
-          >
-            דוחות
-          </button>
-          <button
-            onClick={() => setScreen("delivery")}
-            style={navBtn(screen === "delivery", isDesktop)}
-          >
-            משלוחים
-          </button>
-          {isAdmin && (
-            <button
-              onClick={() => setScreen("inventory")}
-              style={navBtn(screen === "inventory", isDesktop)}
-            >
-              מלאי
+          {[
+            ["customer", "🍔", "לקוח", 0],
+            ["cashier", "💳", "קופאי", firebaseOrders.filter((o) => o.status === "new" || o.status === "paid").length],
+            ["kitchen", "👨‍🍳", "מטבח", firebaseOrders.filter((o) => o.status === "in_progress").length],
+            ["delivery", "🛵", "משלוחים", firebaseOrders.filter((o) => o.deliveryTime && !o.dispatchedAt && o.status !== "delivered").length],
+            ["inventory", "📦", "מלאי", 0],
+            ["analytics", "📊", "דוחות", 0],
+          ].map(([key, icon, label, count]) => (
+            <button key={key} type="button" onClick={() => setScreen(key)} style={navBtn(screen === key)}>
+              <span aria-hidden="true">{icon}</span>
+              {label}
+              {navBadge(count)}
             </button>
-          )}
+          ))}
         </div>
-      </div>
       )}
 
       <div>
@@ -912,7 +885,7 @@ export default function App() {
 
         {activeScreen === "inventory" &&
           (isAdmin ? (
-            <InventoryScreen soldOut={soldOut} />
+            <InventoryScreen soldOut={inventory.soldOut} qty={inventory.qty} />
           ) : (
             <div style={{ padding: "20px", borderRadius: "20px", background: "rgba(255,255,255,0.92)", border: "1px solid #dbe7e4", fontWeight: 700 }}>
               צריך להתחבר

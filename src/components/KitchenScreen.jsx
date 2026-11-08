@@ -1,39 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  LogoHeader,
-  SectionTitle,
-} from "./uiHelpers.jsx";
+import { OrderItems, StaffPills } from "./uiHelpers.jsx";
 import {
   formatDurationMs,
-  getIncludedToppings,
-  screenCardStyle,
+  orderTypeText,
+  STAFF,
+  staffBtn,
+  staffChip,
+  staffRootStyle,
+  staffSubbarStyle,
+  useStaffViewport,
 } from "./uiHelpersUtils.jsx";
-import { DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
-import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
 import { toMillis } from "../utils/timeUtils.js";
-
-const ALL_DRINKS = [...DRINK_OPTIONS, ...EXTRA_DRINK_OPTIONS];
-const drinkLabelMap = Object.fromEntries(ALL_DRINKS.map((d) => [d.key, d.label]));
-
-function FamilyMealsLines({ item }) {
-  if (!Array.isArray(item?.familyMeals) || item.familyMeals.length === 0) return null;
-  return (
-    <div style={{ display: "grid", gap: 2, marginTop: 2, paddingRight: 8, borderRight: "2px solid #e5e7eb" }}>
-      {item.familyMeals.map((meal, idx) => {
-        const toppings = modsKeysToDisplayLabels(meal?.mods);
-        const drink = meal?.drinkLabel || drinkLabelMap[meal?.drinkKey];
-        return (
-          <div key={idx} style={{ fontSize: 12, lineHeight: 1.5 }}>
-            <span style={{ fontWeight: 800, color: "#111827" }}>מנה {meal?.mealNumber || idx + 1}:</span>{" "}
-            <span style={{ color: "#059669" }}>{toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות"}</span>
-            {drink && <span style={{ color: "#2563eb", marginRight: 6 }}>🥤 {drink}</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function displayCustomerName(name) {
   return (name || "").trim() || "לקוח";
@@ -47,7 +25,6 @@ export default function KitchenScreen({
 }) {
   const [, forceTick] = useState(0);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showOnlyUnhandled, setShowOnlyUnhandled] = useState(false);
   const kachingAudioRef = useRef(null);
   const kitchenAudioUnlockedRef = useRef(false);
   const pendingKachingRef = useRef(false);
@@ -63,9 +40,6 @@ export default function KitchenScreen({
     (o) => o.status === "in_progress" || o.status === "ready"
   );
   const completedOrders = orders.filter((o) => o.status === "delivered");
-  const displayedActiveOrders = showOnlyUnhandled
-    ? activeOrders.filter((o) => o.status === "in_progress")
-    : activeOrders;
   const kitchenOrderIds = [...activeOrders, ...completedOrders].map((o) => o.id).filter(Boolean);
 
   useEffect(() => {
@@ -235,6 +209,52 @@ export default function KitchenScreen({
     return `${minutes}:${seconds}`;
   };
 
+  const { ref, height, isMobile } = useStaffViewport();
+  const wallRef = useRef(null);
+  const [wallSize, setWallSize] = useState({ w: 1000, h: 500 });
+  const [view, setView] = useState("active");
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    const el = wallRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(([entry]) =>
+      setWallSize({ w: entry.contentRect.width, h: entry.contentRect.height })
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const elapsedMinutes = (order) => {
+    const startMs = getOrderStartMs(order);
+    if (startMs == null) return 0;
+    return Math.floor(((toMillis(order.readyAt) ?? nowMs) - startMs) / 60000);
+  };
+
+  const bandColor = (order) => {
+    if (order.status === "delivered") return "#94a3b8";
+    if (order.status === "ready") return "#64748b";
+    const minutes = elapsedMinutes(order);
+    if (minutes >= 12) return STAFF.bad;
+    if (minutes >= 8) return "#d97706";
+    return STAFF.ok;
+  };
+
+  const cooking = orders.filter((o) => o.status === "in_progress").reverse();
+  const readyOrders = orders.filter((o) => o.status === "ready").reverse();
+  const viewOrders = {
+    active: [...cooking, ...readyOrders],
+    cooking,
+    ready: readyOrders,
+    done: completedOrders,
+  }[view];
+  const cols = Math.max(1, Math.floor((wallSize.w + 10) / (isMobile ? 300 : 260)));
+  const rows = Math.max(1, Math.floor((wallSize.h + 10) / 280));
+  const pageSize = cols * rows;
+  const pageCount = Math.max(1, Math.ceil(viewOrders.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleOrders = viewOrders.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+
   const confirmResetAll = async () => {
     if (!kitchenOrderIds.length) {
       setShowResetConfirm(false);
@@ -327,287 +347,112 @@ export default function KitchenScreen({
         )
       : null;
 
+  const pagerBtn = { ...staffBtn("ghost"), padding: "6px 12px" };
+
   return (
-    <div style={screenCardStyle()}>
-      <LogoHeader compact />
-
-      <style>{`
-        @keyframes kitchenPrepPulse {
-          0% { transform: scale(0.92); opacity: 0.55; }
-          50% { transform: scale(1.12); opacity: 1; }
-          100% { transform: scale(0.92); opacity: 0.55; }
-        }
-        @keyframes kitchenSpinnerSpin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "18px" }}>
-        <SectionTitle title="מסך מטבח" subtitle="רק הזמנות ששולמו ונשלחו להכנה" />
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "#f8fafc",
-              border: "1px solid #e5e7eb",
-              borderRadius: "14px",
-              padding: "6px",
-            }}
-          >
-            <button
-              onClick={() => setShowOnlyUnhandled(false)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                background: showOnlyUnhandled ? "transparent" : "#111827",
-                color: showOnlyUnhandled ? "#334155" : "white",
-              }}
-            >
-              כל ההזמנות
-            </button>
-            <button
-              onClick={() => setShowOnlyUnhandled(true)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                background: showOnlyUnhandled ? "#111827" : "transparent",
-                color: showOnlyUnhandled ? "white" : "#334155",
-              }}
-            >
-              טרם טופלו
-            </button>
+    <div ref={ref} style={staffRootStyle(height)}>
+      <div style={staffSubbarStyle()}>
+        <b style={{ fontSize: 16 }}>👨‍🍳 מטבח</b>
+        <StaffPills
+          options={[
+            { key: "active", label: "פעילות", count: cooking.length + readyOrders.length },
+            { key: "cooking", label: "בהכנה", count: cooking.length },
+            { key: "ready", label: "מוכנות", count: readyOrders.length },
+            { key: "done", label: "נמסרו", count: completedOrders.length },
+          ]}
+          value={view}
+          onChange={(next) => {
+            setView(next);
+            setPage(0);
+          }}
+        />
+        {!isMobile && (
+          <div style={{ display: "flex", gap: 4 }}>
+            <span style={staffChip("ok")}>עד 8 ד׳</span>
+            <span style={staffChip("warn")}>8–12</span>
+            <span style={staffChip("bad")}>12+</span>
           </div>
-
+        )}
+        <div style={{ marginInlineStart: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+          <button type="button" aria-label="עמוד קודם" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} style={{ ...pagerBtn, opacity: currentPage === 0 ? 0.4 : 1 }}>→</button>
+          <b style={{ fontSize: 13 }}>עמוד {currentPage + 1}/{pageCount}</b>
+          <button type="button" aria-label="עמוד הבא" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)} style={{ ...pagerBtn, opacity: currentPage >= pageCount - 1 ? 0.4 : 1 }}>←</button>
           <button
+            type="button"
             onClick={() => setShowResetConfirm(true)}
             disabled={!kitchenOrderIds.length}
-            style={{
-              padding: "12px 16px",
-              borderRadius: "16px",
-              border: "1px solid #fecaca",
-              background: "#fff1f2",
-              color: "#b91c1c",
-              cursor: kitchenOrderIds.length ? "pointer" : "not-allowed",
-              fontWeight: 700,
-              opacity: kitchenOrderIds.length ? 1 : 0.6,
-            }}
+            style={{ ...staffBtn("danger"), padding: "6px 10px", fontSize: 12, opacity: kitchenOrderIds.length ? 1 : 0.5 }}
           >
             איפוס כל המידע
           </button>
         </div>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        {/* header bar */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8,
-          background: "#111827", borderRadius: "10px 10px 0 0", padding: "8px 14px",
-        }}>
-          <span style={{ color: "white", fontWeight: 900, fontSize: 16 }}>🍳 הזמנות פעילות</span>
-          <span style={{ background: "#22c55e", color: "white", borderRadius: 999, fontSize: 12, fontWeight: 900, padding: "1px 8px" }}>
-            {displayedActiveOrders.length}
-          </span>
-        </div>
-
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
-          {/* header row */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "64px 1fr 2fr 1fr 90px 120px",
-            background: "#f8fafc",
-            borderBottom: "1px solid #e5e7eb",
-            padding: "6px 12px",
-            fontSize: 12, fontWeight: 800, color: "#6b7280",
-            direction: "rtl",
-          }}>
-            <span>#</span>
-            <span>שם</span>
-            <span>מנות</span>
-            <span>משלוח</span>
-            <span style={{ textAlign: "center" }}>טיימר</span>
-            <span style={{ textAlign: "center" }}>פעולה</span>
+      <div
+        ref={wallRef}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+          gap: 10,
+          padding: 10,
+          overflow: "hidden",
+        }}
+      >
+        {visibleOrders.length === 0 && (
+          <div style={{ color: STAFF.muted, padding: 12, gridColumn: "1 / -1" }}>
+            {view === "done" ? "אין עדיין הזמנות שנמסרו" : "אין הזמנות בהכנה"}
           </div>
-
-          {displayedActiveOrders.length === 0 ? (
-            <div style={{ color: "#6b7280", padding: "12px 14px", fontSize: 13 }}>אין הזמנות בהכנה</div>
-          ) : (
-            displayedActiveOrders.map((order) => (
-              <div key={order.id} style={{
-                display: "grid",
-                gridTemplateColumns: "64px 1fr 2fr 1fr 90px 120px",
-                alignItems: "center",
-                padding: "10px 12px",
-                borderBottom: "1px solid #f1f5f9",
-                background: order.status === "ready" ? "#f0fdf4" : "white",
-                fontSize: 13,
-                direction: "rtl",
-                gap: 4,
-              }}>
-                <span style={{ fontWeight: 900, color: "#111827", fontSize: 14 }}>#{order.orderNumber}</span>
-                <span style={{ fontWeight: 700, color: "#166534", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {displayCustomerName(order.customerName)}
-                </span>
-                <div>
-                  {order.items.map((i, idx) => (
-                    <div key={idx} style={{ color: "#374151", lineHeight: 1.5, marginBottom: 2 }}>
-                      <span style={{ fontWeight: 700 }}>{i.name}{i.qty && i.qty > 1 ? ` ×${i.qty}` : ""}</span>
-                      {i.drinkKey && drinkLabelMap[i.drinkKey] && (
-                        <span style={{ color: "#2563eb", fontSize: 11, marginRight: 4 }}>🥤 {drinkLabelMap[i.drinkKey]}</span>
-                      )}
-                      {getIncludedToppings(i).length > 0 && (
-                        <span style={{ color: "#059669", fontSize: 11, marginRight: 4 }}>
-                          +{getIncludedToppings(i).join(", ")}
-                        </span>
-                      )}
-                      <FamilyMealsLines item={i} />
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  {order.deliveryTime ? (
-                    <div style={{ background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
-                      <div style={{ color: "#92400e", fontWeight: 900 }}>🛵 {order.deliveryTime}</div>
-                      {order.deliveryCity && <div style={{ color: "#78350f", fontWeight: 700 }}>{order.deliveryCity}</div>}
-                    </div>
-                  ) : order.pickupTime ? (
-                    <div style={{ background: "#dcfce7", border: "1px solid #86efac", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
-                      <div style={{ color: "#166534", fontWeight: 900 }}>🏪 {order.pickupTime}</div>
-                    </div>
-                  ) : (
-                    <span style={{ color: "#9ca3af", fontSize: 12 }}>איסוף</span>
-                  )}
-                </div>
-                <div style={{ textAlign: "center", background: "#111827", color: "#fff", borderRadius: 10, padding: "6px 4px" }}>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>זמן</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 1 }}>{formatElapsed(order)}</div>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  {order.status === "in_progress" ? (
-                    <button
-                      onClick={() => onMarkReady(order.id)}
-                      style={{
-                        padding: "8px 12px", borderRadius: 8, border: "none",
-                        background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
-                        color: "white", fontWeight: 800, fontSize: 20, cursor: "pointer", width: "100%",
-                      }}
-                      aria-label="סיימתי להכין"
-                      title="סיימתי להכין"
-                    >✓</button>
-                  ) : (
-                    <button
-                      onClick={() => onMarkDelivered(order.id)}
-                      style={{
-                        padding: "6px 8px", borderRadius: 8, border: "none",
-                        background: "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
-                        color: "white", fontWeight: 800, fontSize: 11, cursor: "pointer", width: "100%",
-                      }}
-                    >נמסר</button>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {!showOnlyUnhandled && (
-        <div style={{ marginTop: "8px" }}>
-          {/* header bar */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: "#374151", borderRadius: "10px 10px 0 0", padding: "8px 14px",
-          }}>
-            <span style={{ color: "white", fontWeight: 900, fontSize: 16 }}>📋 היסטוריית הזמנות</span>
-            <span style={{ background: "#6b7280", color: "white", borderRadius: 999, fontSize: 12, fontWeight: 900, padding: "1px 8px" }}>
-              {completedOrders.length}
-            </span>
-          </div>
-
-          <div style={{ border: "1px solid #e5e7eb", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
-            {/* header row */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "64px 1fr 2fr 1fr 100px",
-              background: "#f8fafc",
-              borderBottom: "1px solid #e5e7eb",
-              padding: "6px 12px",
-              fontSize: 12, fontWeight: 800, color: "#6b7280",
-              direction: "rtl",
-            }}>
-              <span>#</span>
-              <span>שם</span>
-              <span>מנות</span>
-              <span>משלוח</span>
-              <span style={{ textAlign: "center" }}>זמן הכנה</span>
+        )}
+        {visibleOrders.map((order) => (
+          <article
+            key={order.id}
+            style={{
+              background: "white",
+              borderRadius: 14,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              overflow: "hidden",
+              boxShadow: "0 2px 8px rgba(43,33,24,0.08)",
+            }}
+          >
+            <div style={{ background: bandColor(order), color: "white", padding: "7px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontWeight: 900, fontSize: 16 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                #{order.orderNumber} {displayCustomerName(order.customerName)}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>
+                {order.status === "in_progress"
+                  ? `⏱ ${formatElapsed(order)}`
+                  : order.status === "ready"
+                  ? "🛎️ מוכנה"
+                  : `⏱ ${formatDurationMs(getOrderStartMs(order), order.readyAt) || "—"}`}
+              </span>
             </div>
-
-            {completedOrders.length === 0 ? (
-              <div style={{ color: "#6b7280", padding: "12px 14px", fontSize: 13 }}>אין עדיין הזמנות שנמסרו</div>
-            ) : (
-              completedOrders.map((order) => (
-                <div key={order.id} style={{
-                  display: "grid",
-                  gridTemplateColumns: "64px 1fr 2fr 1fr 100px",
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  borderBottom: "1px solid #f1f5f9",
-                  background: "#f8fafc",
-                  fontSize: 13,
-                  direction: "rtl",
-                  gap: 4,
-                }}>
-                  <span style={{ fontWeight: 900, color: "#374151", fontSize: 14 }}>#{order.orderNumber}</span>
-                  <span style={{ fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {displayCustomerName(order.customerName)}
-                  </span>
-                  <div>
-                    {order.items.map((i, idx) => (
-                      <div key={idx} style={{ color: "#374151", lineHeight: 1.5, marginBottom: 2 }}>
-                        <span style={{ fontWeight: 700 }}>{i.name}{i.qty && i.qty > 1 ? ` ×${i.qty}` : ""}</span>
-                        {i.drinkKey && drinkLabelMap[i.drinkKey] && (
-                          <span style={{ color: "#2563eb", fontSize: 11, marginRight: 4 }}>🥤 {drinkLabelMap[i.drinkKey]}</span>
-                        )}
-                        {getIncludedToppings(i).length > 0 && (
-                          <span style={{ color: "#059669", fontSize: 11, marginRight: 4 }}>
-                            +{getIncludedToppings(i).join(", ")}
-                          </span>
-                        )}
-                        <FamilyMealsLines item={i} />
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    {order.deliveryTime ? (
-                      <div style={{ fontSize: 12 }}>
-                        <div style={{ color: "#92400e", fontWeight: 900 }}>🛵 {order.deliveryTime}</div>
-                        {order.deliveryCity && <div style={{ color: "#78350f", fontWeight: 700 }}>{order.deliveryCity}</div>}
-                      </div>
-                    ) : order.pickupTime ? (
-                      <div style={{ fontSize: 12 }}>
-                        <div style={{ color: "#166534", fontWeight: 900 }}>🏪 {order.pickupTime}</div>
-                      </div>
-                    ) : (
-                      <span style={{ color: "#9ca3af", fontSize: 12 }}>איסוף</span>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "center", fontWeight: 800, color: "#374151", fontSize: 14 }}>
-                    {formatDurationMs(getOrderStartMs(order), order.readyAt) || "—"}
-                  </div>
-                </div>
-              ))
+            <div style={{ padding: "6px 10px", flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <div style={{ marginBottom: 4 }}>
+                <span style={staffChip(order.deliveryTime ? "del" : "neutral")}>{orderTypeText(order)}</span>
+              </div>
+              <OrderItems items={order.items} big={order.status === "in_progress"} showPrice={false} />
+            </div>
+            {order.status !== "delivered" && (
+              <div style={{ padding: "8px 10px", borderTop: `1px solid ${STAFF.line}` }}>
+                {order.status === "in_progress" ? (
+                  <button type="button" onClick={() => onMarkReady(order.id)} aria-label="סיימתי להכין" style={{ ...staffBtn("ok", true), width: "100%" }}>
+                    ✓ סיימתי להכין
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => onMarkDelivered(order.id)} aria-label="נמסר" style={{ ...staffBtn("ghost"), width: "100%" }}>
+                    ✓ נמסר
+                  </button>
+                )}
+              </div>
             )}
-          </div>
-        </div>
-      )}
+          </article>
+        ))}
+      </div>
 
       {resetConfirmModal}
     </div>

@@ -1,5 +1,6 @@
 import React from "react";
-import { logoUrl, screenCardStyle, statusLabel, statusPill } from "./uiHelpersUtils.jsx";
+import { logoUrl, orderItemLines, screenCardStyle, STAFF, statusLabel, statusPill } from "./uiHelpersUtils.jsx";
+import { getDisplayItemName } from "./customer/customerHelpers.js";
 import { ALL_TOPPINGS } from "./customer/customerConstants.js";
 
 const toppingImageMap = Object.fromEntries(ALL_TOPPINGS.map((t) => [t.key, { src: t.imageSrc, label: t.label }]));
@@ -167,4 +168,55 @@ export function MenuVisual({ parts = [], size = "normal" }) {
       )}
     </div>
   );
+}
+
+export function StaffPills({ options, value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {options.map((opt) => {
+        const active = opt.key === value;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => onChange(opt.key)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: `1.5px solid ${active ? STAFF.ink : STAFF.line}`,
+              background: active ? STAFF.ink : "white",
+              color: active ? "white" : STAFF.ink,
+              fontWeight: 800,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {opt.label}
+            {opt.count != null && ` · ${opt.count}`}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function OrderItems({ items = [], big = false, showPrice = true }) {
+  return (items || []).map((item, idx) => (
+    <div key={idx} style={{ padding: "6px 0", borderTop: idx ? `1px dashed ${STAFF.line}` : "none" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 800, fontSize: big ? 17 : 14 }}>
+        <span>
+          {getDisplayItemName(item?.name)}
+          {item?.qty > 1 ? ` ×${item.qty}` : ""}
+        </span>
+        {showPrice && item?.price != null && <span style={{ color: STAFF.muted, whiteSpace: "nowrap" }}>₪{item.price}</span>}
+      </div>
+      {orderItemLines(item).map((line) => (
+        <div key={line} style={{ fontSize: big ? 15 : 13, color: big ? STAFF.ink : "#5b4a3a", marginTop: 2, lineHeight: 1.45 }}>
+          {line}
+        </div>
+      ))}
+    </div>
+  ));
 }

@@ -1,10 +1,20 @@
 import { useState } from "react";
-import { LogoHeader, screenCardStyle, SectionTitle } from "./uiHelpers.jsx";
+import { OrderItems, StaffPills } from "./uiHelpers.jsx";
+import {
+  PAYMENT_LABELS,
+  STAFF,
+  staffBtn,
+  staffChip,
+  staffRootStyle,
+  staffSubbarStyle,
+  statusLabel,
+  useStaffViewport,
+} from "./uiHelpersUtils.jsx";
+import { DELIVERY_FEES_BY_CITY } from "./customer/customerConstants.js";
 import { markDeliveryDispatchedInFirebase } from "../services/orders.js";
 import { toMillis } from "../utils/timeUtils.js";
 
-const DELIVERY_TIMES = ["19:00", "20:00", "21:00"];
-const CITIES = ["בני דקלים", "אליאב", "כרמי קטיף"];
+const CITIES = Object.keys(DELIVERY_FEES_BY_CITY);
 
 function formatTime(value) {
   const ms = toMillis(value);
@@ -12,13 +22,34 @@ function formatTime(value) {
   return new Date(ms).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function DeliveryScreen({ orders = [] }) {
-  const [dispatching, setDispatching] = useState({});
-  const [cityFilter, setCityFilter] = useState("הכל");
+function statusChip(order) {
+  if (order.dispatchedAt || order.dispatchedAtClient) {
+    return <span style={staffChip("ok")}>✅ יצא {formatTime(order.dispatchedAt ?? order.dispatchedAtClient) || ""}</span>;
+  }
+  const tone = order.status === "ready" ? "ok" : order.status === "new" ? "accent" : "warn";
+  return <span style={staffChip(tone)}>{order.status === "new" ? "ממתינה לתשלום" : statusLabel(order.status)}</span>;
+}
 
-  const deliveryOrders = orders.filter(
-    (o) => o.deliveryTime && o.deliveryCity && (cityFilter === "הכל" || o.deliveryCity === cityFilter)
-  );
+export default function DeliveryScreen({ orders = [] }) {
+  const { ref, height, isMobile } = useStaffViewport();
+  const [dispatching, setDispatching] = useState({});
+  const [cityFilter, setCityFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState(null);
+
+  const allDeliveries = orders.filter((o) => o.deliveryTime && o.deliveryCity);
+  const deliveryOrders = allDeliveries
+    .filter((o) => cityFilter === "all" || o.deliveryCity === cityFilter)
+    .sort(
+      (a, b) =>
+        String(a.deliveryTime).localeCompare(String(b.deliveryTime)) ||
+        CITIES.indexOf(a.deliveryCity) - CITIES.indexOf(b.deliveryCity) ||
+        (a.orderNumber || 0) - (b.orderNumber || 0)
+    );
+  const times = [...new Set(deliveryOrders.map((o) => o.deliveryTime))];
+  const selected =
+    deliveryOrders.find((o) => o.id === selectedId) ||
+    (isMobile ? null : deliveryOrders.find((o) => !o.dispatchedAt && !o.dispatchedAtClient) || deliveryOrders[0]) ||
+    null;
 
   const handleDispatch = async (order) => {
     if (dispatching[order.id] || order.dispatchedAt) return;
@@ -26,156 +57,147 @@ export default function DeliveryScreen({ orders = [] }) {
     try {
       await markDeliveryDispatchedInFirebase(order.id);
     } finally {
-      setDispatching((prev) => { const n = { ...prev }; delete n[order.id]; return n; });
+      setDispatching((prev) => {
+        const n = { ...prev };
+        delete n[order.id];
+        return n;
+      });
     }
   };
 
-  const allEmpty = DELIVERY_TIMES.every((t) => deliveryOrders.filter((o) => o.deliveryTime === t).length === 0);
+  const pills = [
+    { key: "all", label: "הכל", count: allDeliveries.length },
+    ...CITIES.map((city) => ({ key: city, label: city, count: allDeliveries.filter((o) => o.deliveryCity === city).length })),
+  ];
+
+  const address = selected ? [selected.deliveryAddress, selected.deliveryCity].filter(Boolean).join(", ") : "";
+  const paid = selected?.paymentActual || selected?.paymentMethod;
+  const dispatched = !!(selected?.dispatchedAt || selected?.dispatchedAtClient);
+
+  const detail = selected && (
+    <aside
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        background: "white",
+        ...(isMobile
+          ? { position: "fixed", left: 0, right: 0, bottom: 0, height: "78vh", zIndex: 25, borderRadius: "22px 22px 0 0", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)" }
+          : { borderInlineStart: `1px solid ${STAFF.line}` }),
+      }}
+    >
+      <div style={{ padding: "12px 16px", borderBottom: `1px solid ${STAFF.line}`, display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <b style={{ fontSize: 20 }}>#{selected.orderNumber} {(selected.customerName || "").trim() || "לקוח"}</b>
+          {isMobile && <button type="button" aria-label="סגירה" onClick={() => setSelectedId(null)} style={staffBtn("ghost")}>✕</button>}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={staffChip("del")}>🛵 {selected.deliveryCity} · {selected.deliveryTime}</span>
+          {statusChip(selected)}
+          <span style={staffChip(paid ? "ok" : "accent")}>
+            {paid ? `שולם · ${PAYMENT_LABELS[paid] || paid}` : `לגבות · ${PAYMENT_LABELS[selected.paymentRequested] || "לא צוין"}`}
+          </span>
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", display: "grid", gap: 8 }}>
+        <div style={{ background: STAFF.soft, borderRadius: 14, padding: "10px 12px" }}>
+          <div style={{ fontSize: 12, color: STAFF.muted, fontWeight: 700 }}>כתובת</div>
+          <div style={{ fontSize: 18, fontWeight: 900 }}>📍 {address || "—"}</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {selected.deliveryPhone ? (
+            <a href={`tel:${selected.deliveryPhone}`} style={{ ...staffBtn("ghost"), textAlign: "center", textDecoration: "none" }}>📞 {selected.deliveryPhone}</a>
+          ) : (
+            <span style={{ ...staffBtn("ghost"), textAlign: "center", color: STAFF.muted }}>אין טלפון</span>
+          )}
+          <a
+            href={`https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...staffBtn("ghost"), textAlign: "center", textDecoration: "none" }}
+          >
+            🧭 Waze
+          </a>
+        </div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 16px" }}>
+        <OrderItems items={selected.items} />
+      </div>
+      <div style={{ padding: "10px 16px 14px", borderTop: `1px solid ${STAFF.line}`, background: "#fffdf9", display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 18 }}>
+          <span>סה״כ (כולל משלוח{selected.deliveryFee ? ` ₪${selected.deliveryFee}` : ""})</span>
+          <span>₪{selected.total || 0}</span>
+        </div>
+        {dispatched ? (
+          <div style={{ textAlign: "center", fontWeight: 900, color: STAFF.ok }}>✅ יצא למשלוח ב-{formatTime(selected.dispatchedAt ?? selected.dispatchedAtClient)}</div>
+        ) : (
+          <button type="button" onClick={() => handleDispatch(selected)} disabled={!!dispatching[selected.id]} style={staffBtn("accent", true)}>
+            {dispatching[selected.id] ? "..." : "🛵 יצא למשלוח"}
+          </button>
+        )}
+      </div>
+    </aside>
+  );
 
   return (
-    <div style={screenCardStyle()}>
-      <LogoHeader compact />
-      <div style={{ marginBottom: 14 }}>
-        <SectionTitle title="מרכז משלוחים" subtitle="הזמנות למשלוח לפי שעה וישוב" />
+    <div ref={ref} style={staffRootStyle(height)}>
+      <div style={staffSubbarStyle()}>
+        <b style={{ fontSize: 16 }}>🛵 משלוחים</b>
+        <StaffPills options={pills} value={cityFilter} onChange={setCityFilter} />
       </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {["הכל", ...CITIES].map((city) => (
-          <button
-            key={city}
-            onClick={() => setCityFilter(city)}
-            style={{
-              padding: "7px 16px",
-              borderRadius: 999,
-              border: `1.5px solid ${cityFilter === city ? "#0f766e" : "#d1d5db"}`,
-              background: cityFilter === city ? "#0f766e" : "white",
-              color: cityFilter === city ? "white" : "#374151",
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            {city}
-          </button>
-        ))}
-      </div>
-
-      {allEmpty && (
-        <div style={{ color: "#6b7280", fontWeight: 600, padding: "8px 0" }}>אין הזמנות משלוח להיום</div>
-      )}
-
-      {DELIVERY_TIMES.map((time) => {
-        const ordersAtTime = deliveryOrders.filter((o) => o.deliveryTime === time);
-        if (ordersAtTime.length === 0) return null;
-
-        return (
-          <div key={time} style={{ marginBottom: 20 }}>
-            {/* כותרת שעה */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
-              background: "#111827", borderRadius: "10px 10px 0 0", padding: "8px 14px",
-            }}>
-              <span style={{ color: "white", fontWeight: 900, fontSize: 16 }}>🕐 {time}</span>
-              <span style={{ background: "#f59e0b", color: "white", borderRadius: 999, fontSize: 12, fontWeight: 900, padding: "1px 8px" }}>
-                {ordersAtTime.length}
-              </span>
-            </div>
-
-            {/* טבלה */}
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
-              {/* header row */}
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "80px 1fr 1fr 1fr 1fr 110px",
-                background: "#f8fafc",
-                borderBottom: "1px solid #e5e7eb",
-                padding: "6px 12px",
-                fontSize: 12, fontWeight: 800, color: "#6b7280",
-                direction: "rtl",
-              }}>
-                <span>#</span>
-                <span>שם</span>
-                <span>ישוב</span>
-                <span>כתובת</span>
-                <span>טלפון</span>
-                <span style={{ textAlign: "center" }}>סטטוס</span>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 400px" }}>
+        <div style={{ minHeight: 0, overflowY: "auto", padding: "6px 12px 12px", display: "grid", gap: 6, alignContent: "start" }}>
+          {deliveryOrders.length === 0 && <div style={{ color: STAFF.muted, padding: 12 }}>אין הזמנות משלוח להיום</div>}
+          {times.map((time) => (
+            <div key={time} style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: STAFF.muted, padding: "6px 4px 0" }}>
+                🕒 {time} · {deliveryOrders.filter((o) => o.deliveryTime === time).length}
               </div>
-
-              {CITIES.map((city) => {
-                const cityOrders = ordersAtTime.filter((o) => o.deliveryCity === city);
-                if (cityOrders.length === 0) return null;
-
-                return cityOrders.map((order, idx) => {
-                  const dispatched = !!order.dispatchedAt;
-                  const dispatchTime = formatTime(order.dispatchedAt ?? order.dispatchedAtClient);
-                  const loading = dispatching[order.id];
-                  const isFirst = idx === 0;
-
+              {deliveryOrders
+                .filter((o) => o.deliveryTime === time)
+                .map((order) => {
+                  const isSel = selected?.id === order.id;
                   return (
-                    <div key={order.id}>
-                      {/* city divider on first item of city */}
-                      {isFirst && (
-                        <div style={{
-                          background: "#f0fdf4", borderBottom: "1px solid #e5e7eb",
-                          padding: "4px 12px", fontSize: 12, fontWeight: 800, color: "#0f766e",
-                        }}>
-                          📍 {city}
-                        </div>
-                      )}
-                      <div style={{
+                    <button
+                      key={order.id}
+                      type="button"
+                      onClick={() => setSelectedId(order.id)}
+                      style={{
                         display: "grid",
-                        gridTemplateColumns: "80px 1fr 1fr 1fr 1fr 110px",
+                        gridTemplateColumns: "auto 1fr auto",
                         alignItems: "center",
-                        padding: "8px 12px",
-                        borderBottom: "1px solid #f1f5f9",
-                        background: dispatched ? "#f0fdf4" : "white",
-                        fontSize: 13,
-                        direction: "rtl",
-                        gap: 4,
-                      }}>
-                        <span style={{ fontWeight: 800, color: "#374151" }}>
-                          #{order.orderNumber}
-                          <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#9ca3af" }}>₪{order.total}</span>
+                        gap: 10,
+                        textAlign: "right",
+                        background: isSel ? STAFF.accentSoft : "white",
+                        border: `2px solid ${isSel ? STAFF.accent : "transparent"}`,
+                        borderRadius: 14,
+                        padding: "9px 12px",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        color: STAFF.ink,
+                      }}
+                    >
+                      <span style={{ fontSize: 18, fontWeight: 900, color: STAFF.muted }}>#{order.orderNumber}</span>
+                      <span style={{ display: "grid", gap: 3, minWidth: 0 }}>
+                        <b style={{ fontSize: 15 }}>{(order.customerName || "").trim() || "לקוח"}</b>
+                        <span style={{ fontSize: 12, color: STAFF.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          📍 {[order.deliveryAddress, order.deliveryCity].filter(Boolean).join(", ") || "—"}
+                          {order.deliveryPhone ? ` · 📞 ${order.deliveryPhone}` : ""}
                         </span>
-                        <span style={{ fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {order.customerName || "לקוח"}
-                        </span>
-                        <span style={{ color: "#374151" }}>{order.deliveryCity}</span>
-                        <span style={{ color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {order.deliveryAddress || "—"}
-                        </span>
-                        <span style={{ color: "#374151" }}>{order.deliveryPhone || "—"}</span>
-                        <div style={{ textAlign: "center" }}>
-                          {dispatched ? (
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "#166534" }}>
-                              ✅ {dispatchTime}
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleDispatch(order)}
-                              disabled={loading}
-                              style={{
-                                padding: "6px 10px", borderRadius: 8, border: "none",
-                                background: loading ? "#d1d5db" : "linear-gradient(135deg, #0f766e 0%, #f59e0b 100%)",
-                                color: loading ? "#6b7280" : "white",
-                                fontWeight: 800, fontSize: 12, cursor: loading ? "default" : "pointer",
-                                whiteSpace: "nowrap", width: "100%",
-                              }}
-                            >
-                              {loading ? "..." : "🛵 יצא"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                        <span>{statusChip(order)}</span>
+                      </span>
+                      <span style={{ fontWeight: 900, fontSize: 17 }}>₪{order.total || 0}</span>
+                    </button>
                   );
-                });
-              })}
+                })}
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </div>
+        {detail}
+      </div>
+      {isMobile && selected && (
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(43,33,24,0.35)", zIndex: 24 }} />
+      )}
     </div>
   );
 }

@@ -1,73 +1,84 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { OrderItems, StaffPills } from "./uiHelpers.jsx";
 import {
-  LogoHeader,
-  MenuVisual,
-  SectionTitle,
-} from "./uiHelpers.jsx";
-import {
-  menu,
-  buildItemParts,
-  screenCardStyle,
+  minutesSince,
+  orderTypeText,
+  PAYMENT_LABELS,
+  STAFF,
+  staffBtn,
+  staffChip,
+  staffRootStyle,
+  staffSubbarStyle,
   statusLabel,
-  statusPill,
+  useStaffViewport,
 } from "./uiHelpersUtils.jsx";
-import { modsKeysToDisplayLabels } from "./customer/customerHelpers.js";
-import { DRINK_OPTIONS, EXTRA_DRINK_OPTIONS } from "./customer/customerConstants.js";
+import { getDisplayItemName } from "./customer/customerHelpers.js";
 
-const drinkLabelByKey = Object.fromEntries(
-  [...DRINK_OPTIONS, ...EXTRA_DRINK_OPTIONS].map((d) => [d.key, d.label])
-);
+const FILTERS = {
+  open: (o) => o.status === "new" || o.status === "paid",
+  kitchen: (o) => o.status === "in_progress" || o.status === "ready",
+  done: (o) => o.status === "delivered",
+  all: () => true,
+};
 
-function ItemDetailsLine({ label, mods, showToppings, drink }) {
-  const toppings = modsKeysToDisplayLabels(mods);
-  const parts = [];
-  if (showToppings) parts.push(toppings.length > 0 ? `+${toppings.join(", ")}` : "ללא תוספות");
-  if (drink) parts.push(`🥤 ${drink}`);
-  if (!label && parts.length === 0) return null;
-  return (
-    <div style={{ fontSize: "13px", color: "#334155", marginTop: "2px" }}>
-      {label && <span style={{ fontWeight: 800 }}>{label}:</span>} {parts.join(" · ")}
-    </div>
-  );
-}
-
-const menuPartsById = Object.fromEntries(menu.map((m) => [m.id, m.parts || []]));
-
-function payBtnStyle(background, color, active = false) {
-  return {
-    padding: "12px 16px",
-    borderRadius: "16px",
-    border: active ? "2px solid #ef4444" : "1px solid #d1d5db",
-    background,
-    color,
-    cursor: "pointer",
-    fontWeight: 700,
-    boxShadow: active ? "0 0 0 2px rgba(239,68,68,0.14)" : "none",
-  };
-}
-
-function paymentLabel(method) {
-  if (method === "cash") return "מזומן";
-  if (method === "bit") return "Bit";
-  if (method === "paybox") return "PayBox";
-  return "-";
-}
-
-function paymentConfirmationMessage(method) {
-  if (method === "cash") return "התקבל תשלום במזומן";
-  if (method === "bit") return "התקבל תשלום ב-Bit";
-  if (method === "paybox") return "התקבל תשלום ב-PayBox";
-  return "-";
-}
-
-function cashierStatusLabel(status) {
-  if (status === "new") return "הזמנה חדשה";
-  if (status === "ready") return "ההזמנה מוכנה";
-  return statusLabel(status);
-}
+const PAY_BUTTONS = [
+  ["cash", "💵 התקבל תשלום במזומן"],
+  ["bit", "Bit"],
+  ["paybox", "PayBox"],
+];
 
 function displayCustomerName(name) {
   return (name || "").trim() || "לקוח";
+}
+
+function statusTone(status) {
+  if (status === "new") return "accent";
+  if (status === "paid" || status === "ready") return "ok";
+  if (status === "in_progress") return "warn";
+  return "neutral";
+}
+
+function cashierStatusLabel(status) {
+  if (status === "new") return "ממתינה לתשלום";
+  if (status === "paid") return "שולמה";
+  return statusLabel(status);
+}
+
+function OrderRow({ order, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        textAlign: "right",
+        background: selected ? STAFF.accentSoft : "white",
+        border: `2px solid ${selected ? STAFF.accent : "transparent"}`,
+        borderRadius: 14,
+        padding: "9px 12px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        color: STAFF.ink,
+      }}
+    >
+      <span style={{ fontSize: 18, fontWeight: 900, color: STAFF.muted }}>#{order.orderNumber}</span>
+      <span style={{ display: "grid", gap: 3, minWidth: 0 }}>
+        <b style={{ fontSize: 15 }}>{displayCustomerName(order.customerName)}</b>
+        <span style={{ fontSize: 12, color: STAFF.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {(order.items || []).map((i) => getDisplayItemName(i?.name)).join(" · ")}
+        </span>
+        <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          <span style={staffChip(order.deliveryTime ? "del" : "neutral")}>{orderTypeText(order)}</span>
+          <span style={staffChip(statusTone(order.status))}>{cashierStatusLabel(order.status)}</span>
+        </span>
+      </span>
+      <span style={{ fontWeight: 900, fontSize: 17 }}>₪{order.total || 0}</span>
+    </button>
+  );
 }
 
 export default function CashierScreen({
@@ -75,301 +86,143 @@ export default function CashierScreen({
   onPay = () => {},
   onSendToKitchen = () => {},
 }) {
-  const [showOnlyUnhandled, setShowOnlyUnhandled] = useState(false);
+  const { ref, height, isMobile } = useStaffViewport();
+  const [filter, setFilter] = useState("open");
+  const [selectedId, setSelectedId] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const displayedOrders = showOnlyUnhandled
-    ? orders.filter((order) => order.status === "new" || order.status === "paid")
-    : orders;
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const filtered = orders.filter(FILTERS[filter]);
+  const shown = filter === "open" ? [...filtered].reverse() : filtered;
+  const selected = shown.find((o) => o.id === selectedId) || (isMobile ? null : shown[0]) || null;
+
+  const pills = [
+    { key: "open", label: "לטיפול", count: orders.filter(FILTERS.open).length },
+    { key: "kitchen", label: "במטבח", count: orders.filter(FILTERS.kitchen).length },
+    { key: "done", label: "נמסרו", count: orders.filter(FILTERS.done).length },
+    { key: "all", label: "הכל", count: orders.length },
+  ];
+
+  const ago = selected ? minutesSince(selected.createdAtClient ?? selected.createdAt, nowMs) : null;
+  const canPay = selected && (selected.status === "new" || selected.status === "paid");
+  const actualPayment = selected?.paymentActual || selected?.paymentMethod;
+
+  const detail = selected && (
+    <aside
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        background: "white",
+        ...(isMobile
+          ? { position: "fixed", left: 0, right: 0, bottom: 0, height: "78vh", zIndex: 25, borderRadius: "22px 22px 0 0", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)" }
+          : { borderInlineStart: `1px solid ${STAFF.line}` }),
+      }}
+    >
+      <div style={{ padding: "12px 16px", borderBottom: `1px solid ${STAFF.line}`, display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <b style={{ fontSize: 20 }}>
+            #{selected.orderNumber} {displayCustomerName(selected.customerName)}
+          </b>
+          {isMobile ? (
+            <button type="button" aria-label="סגירה" onClick={() => setSelectedId(null)} style={staffBtn("ghost")}>✕</button>
+          ) : (
+            ago != null && <span style={{ color: STAFF.muted, fontSize: 13 }}>לפני {ago} ד׳</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span style={staffChip(selected.deliveryTime ? "del" : "neutral")}>{orderTypeText(selected)}</span>
+          <span style={staffChip(statusTone(selected.status))}>{cashierStatusLabel(selected.status)}</span>
+          {selected.paymentRequested && (
+            <span style={staffChip("accent")}>ביקש: {PAYMENT_LABELS[selected.paymentRequested] || selected.paymentRequested}</span>
+          )}
+          {actualPayment && <span style={staffChip("ok")}>שולם · {PAYMENT_LABELS[actualPayment] || actualPayment}</span>}
+        </div>
+        {selected.deliveryTime && (selected.deliveryAddress || selected.deliveryPhone) && (
+          <div style={{ fontSize: 13, color: STAFF.del, fontWeight: 700 }}>
+            📍 {[selected.deliveryAddress, selected.deliveryCity].filter(Boolean).join(", ")}
+            {selected.deliveryPhone && ` · 📞 ${selected.deliveryPhone}`}
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 16px" }}>
+        <OrderItems items={selected.items} />
+      </div>
+      <div style={{ padding: "10px 16px 14px", borderTop: `1px solid ${STAFF.line}`, background: "#fffdf9", display: "grid", gap: 8 }}>
+        {selected.deliveryFee > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: STAFF.muted, fontWeight: 700 }}>
+            <span>דמי משלוח</span>
+            <span>₪{selected.deliveryFee}</span>
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 20 }}>
+          <span>סה״כ</span>
+          <span>₪{selected.total || 0}</span>
+        </div>
+        {canPay && (
+          <>
+            <div style={{ fontSize: 12, color: STAFF.muted, fontWeight: 700 }}>
+              {selected.status === "new" ? "בחרו איך התקבל התשלום:" : "אפשר לשנות את אופן התשלום לפני שליחה למטבח"}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr", gap: 6 }}>
+              {PAY_BUTTONS.map(([method, label]) => {
+                const active = actualPayment === method;
+                const requested = selected.paymentRequested === method;
+                return (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => onPay(selected.id, method)}
+                    style={{
+                      ...staffBtn("ghost"),
+                      padding: "10px 6px",
+                      fontSize: 13,
+                      whiteSpace: "normal",
+                      background: active ? STAFF.okSoft : requested ? STAFF.accentSoft : "white",
+                      borderColor: active ? STAFF.ok : requested ? STAFF.accent : STAFF.line,
+                      color: active ? STAFF.ok : STAFF.ink,
+                    }}
+                  >
+                    {active ? "✓ " : ""}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {selected.status === "paid" && (
+          <button type="button" onClick={() => onSendToKitchen(selected.id)} style={staffBtn("accent", true)}>
+            שלח למטבח ←
+          </button>
+        )}
+      </div>
+    </aside>
+  );
 
   return (
-    <div style={screenCardStyle()}>
-      <LogoHeader compact />
-      <SectionTitle title="מסך קופאי" subtitle="אישור תשלום ושליחה למטבח" />
-
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "8px",
-          background: "#f8fafc",
-          border: "1px solid #e5e7eb",
-          borderRadius: "14px",
-          padding: "6px",
-          marginBottom: "14px",
-        }}
-      >
-        <button
-          onClick={() => setShowOnlyUnhandled(false)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: "10px",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 700,
-            background: showOnlyUnhandled ? "transparent" : "#111827",
-            color: showOnlyUnhandled ? "#334155" : "white",
-          }}
-        >
-          כל ההזמנות
-        </button>
-        <button
-          onClick={() => setShowOnlyUnhandled(true)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: "10px",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 700,
-            background: showOnlyUnhandled ? "#111827" : "transparent",
-            color: showOnlyUnhandled ? "white" : "#334155",
-          }}
-        >
-          טרם טופלו
-        </button>
+    <div ref={ref} style={staffRootStyle(height)}>
+      <div style={staffSubbarStyle()}>
+        <b style={{ fontSize: 16 }}>💳 קופה</b>
+        <StaffPills options={pills} value={filter} onChange={setFilter} />
       </div>
-
-      {displayedOrders.length === 0 ? (
-        <div style={{ color: "#6b7280" }}>
-          {showOnlyUnhandled ? "אין הזמנות שטרם טופלו" : "אין עדיין הזמנות"}
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gap: "14px",
-            maxWidth: "760px",
-            margin: "0 auto",
-          }}
-        >
-          {displayedOrders.map((order, index) => (
-            <div
-              key={order.id}
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: "22px",
-                padding: "18px",
-                background: "white",
-                boxShadow: "0 10px 24px rgba(15,23,42,0.05)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: "12px",
-                  flexWrap: "wrap",
-                  marginBottom: "10px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      fontSize: "20px",
-                      color: "#111827",
-                    }}
-                  >
-                    הזמנה #{order.orderNumber || index + 1}
-                  </div>
-                  <div
-                    style={{
-                      color: "#1d4ed8",
-                      fontWeight: 700,
-                      marginTop: "4px",
-                    }}
-                  >
-                    שם הלקוח: {displayCustomerName(order.customerName)}
-                  </div>
-                  {order.deliveryTime && (
-                    <div style={{ marginTop: "8px", background: "#fef3c7", border: "2px solid #f59e0b", borderRadius: "10px", padding: "8px 12px" }}>
-                      <div style={{ color: "#92400e", fontWeight: 900, fontSize: "15px", marginBottom: "3px" }}>
-                        🛵 משלוח ב-{order.deliveryTime}
-                      </div>
-                      {(order.deliveryAddress || order.deliveryCity) && (
-                        <div style={{ color: "#78350f", fontWeight: 700, fontSize: "13px" }}>📍 {[order.deliveryAddress, order.deliveryCity].filter(Boolean).join(", ")}</div>
-                      )}
-                      {order.deliveryPhone && (
-                        <div style={{ color: "#78350f", fontWeight: 700, fontSize: "13px", marginTop: "2px" }}>📞 {order.deliveryPhone}</div>
-                      )}
-                    </div>
-                  )}
-                  {!order.deliveryTime && order.pickupTime && (
-                    <div style={{ marginTop: "8px", background: "#dcfce7", border: "2px solid #16a34a", borderRadius: "10px", padding: "8px 12px" }}>
-                      <div style={{ color: "#166534", fontWeight: 900, fontSize: "15px" }}>
-                        🏪 איסוף עצמי ב-{order.pickupTime}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={statusPill(order.status)}>
-                  {cashierStatusLabel(order.status)}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: "10px", marginBottom: "10px" }}>
-                {(order.items || []).map((item, idx) => (
-                  <div key={`${order.id}-${idx}`} style={{ display: "flex", gap: "10px", alignItems: "center", background: "#f8fafc", borderRadius: "12px", padding: "8px 10px" }}>
-                    <div style={{ width: "96px", height: "60px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
-                      <MenuVisual parts={buildItemParts(item, menuPartsById)} size="small" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: "14px", color: "#0f172a" }}>
-                        {item.name}{item.qty && item.qty > 1 ? ` ×${item.qty}` : ""}
-                      </div>
-                      {Array.isArray(item.familyMeals) ? (
-                        item.familyMeals.map((meal, mealIdx) => (
-                          <ItemDetailsLine
-                            key={mealIdx}
-                            label={`מנה ${meal?.mealNumber || mealIdx + 1}`}
-                            mods={meal?.mods}
-                            showToppings
-                            drink={meal?.drinkLabel || drinkLabelByKey[meal?.drinkKey]}
-                          />
-                        ))
-                      ) : (
-                        <ItemDetailsLine
-                          mods={item.mods}
-                          showToppings={!!item.allowsToppings || modsKeysToDisplayLabels(item.mods).length > 0}
-                          drink={item.drinkLabel || drinkLabelByKey[item.drinkKey] || drinkLabelByKey[item.drinkType]}
-                        />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  marginBottom: "12px",
-                  fontWeight: 700,
-                  color: "#111827",
-                }}
-              >
-                סה"כ: ₪{order.total || 0}
-              </div>
-
-              {order.paymentRequested && (
-                <div
-                  style={{
-                    marginBottom: "12px",
-                    background: "#f8fafc",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "14px",
-                    padding: "10px 12px",
-                    color: "#334155",
-                    fontWeight: 700,
-                  }}
-                >
-                  אופן תשלום מבוקש: {paymentLabel(order.paymentRequested)}
-                </div>
-              )}
-
-              {order.paymentActual && (
-                <div
-                  style={{
-                    marginBottom: "12px",
-                    background: "#eff6ff",
-                    border: "1px solid #bfdbfe",
-                    borderRadius: "14px",
-                    padding: "10px 12px",
-                    color: "#1d4ed8",
-                    fontWeight: 700,
-                  }}
-                >
-                  {paymentConfirmationMessage(order.paymentActual)}
-                </div>
-              )}
-
-              {(order.status === "new" || order.status === "paid") && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                    marginBottom: "10px",
-                  }}
-                >
-                  <button
-                    onClick={() => onPay(order.id, "cash")}
-                    style={payBtnStyle(
-                      "#ecfeff",
-                      "#155e75",
-                      order.paymentActual === "cash" || order.paymentMethod === "cash"
-                    )}
-                  >
-                    💵 התקבל תשלום במזומן
-                  </button>
-
-                  <button
-                    onClick={() => onPay(order.id, "bit")}
-                    style={payBtnStyle(
-                      "#eef2ff",
-                      "#4338ca",
-                      order.paymentActual === "bit" || order.paymentMethod === "bit"
-                    )}
-                  >
-                    BIT
-                  </button>
-
-                  <button
-                    onClick={() => onPay(order.id, "paybox")}
-                    style={payBtnStyle(
-                      "#fff7ed",
-                      "#c2410c",
-                      order.paymentActual === "paybox" || order.paymentMethod === "paybox"
-                    )}
-                  >
-                    PayBox
-                  </button>
-                </div>
-              )}
-
-              {(order.status === "new" || order.status === "paid") && (
-                <div
-                  style={{
-                    marginBottom: "10px",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                  }}
-                >
-                  ניתן לעדכן את אופן התשלום לפני שליחה למטבח
-                </div>
-              )}
-
-              {order.status === "paid" && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    width: "100%",
-                    marginTop: "6px",
-                  }}
-                >
-                  <button
-                    onClick={() => onSendToKitchen(order.id)}
-                    style={{
-                      padding: "15px 30px",
-                      borderRadius: "16px",
-                      border: "none",
-                      background:
-                        "linear-gradient(135deg, #111827 0%, #f59e0b 100%)",
-                      color: "white",
-                      cursor: "pointer",
-                      fontWeight: 800,
-                      fontSize: "17px",
-                      minWidth: "230px",
-                      textAlign: "center",
-                    }}
-                  >
-                    שלח למטבח
-                  </button>
-                </div>
-              )}
-            </div>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 400px" }}>
+        <div style={{ minHeight: 0, overflowY: "auto", padding: "10px 12px", display: "grid", gap: 6, alignContent: "start" }}>
+          {shown.length === 0 && (
+            <div style={{ color: STAFF.muted, padding: 12 }}>{filter === "open" ? "אין הזמנות שממתינות לטיפול" : "אין הזמנות להצגה"}</div>
+          )}
+          {shown.map((order) => (
+            <OrderRow key={order.id} order={order} selected={selected?.id === order.id} onSelect={() => setSelectedId(order.id)} />
           ))}
         </div>
+        {detail}
+      </div>
+      {isMobile && selected && (
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(43,33,24,0.35)", zIndex: 24 }} />
       )}
     </div>
   );
