@@ -264,11 +264,9 @@ before(async () => {
     { cwd: workerDir },
     logs
   );
-  await waitFor(
-    () => fetch(`http://127.0.0.1:${WORKER_PORT}/`).then((r) => r.status === 404).catch(() => false),
-    90000,
-    "wrangler dev"
-  );
+  // Wait for "Ready" without an HTTP request: any request starts the minute alarm,
+  // which is only wanted in the last test.
+  await waitFor(() => logs.some((l) => l.includes("Ready on")), 90000, "wrangler dev");
 });
 
 after(async () => {
@@ -467,4 +465,25 @@ test("burst of 17 orders: at most 15 per run, ~1/s, none lost", async () => {
   const [r2] = await trigger({ waitMs: 2500 });
   assert.equal(r2.sent, 2);
   assert.equal(telegram.delivered.filter((m) => m.text.includes("עומס")).length, 17);
+});
+
+test("closed cashier: the Durable Object alarm keeps running every minute and survives a failing run", async () => {
+  // No browser and no cron: one request books the alarm, then it re-arms itself.
+  const r = await fetch(`http://127.0.0.1:${WORKER_PORT}/test`);
+  assert.equal(r.status, 404, "temporary /test route is gone");
+  await waitFor(() => logs.some((l) => l.includes('"event":"alarm_started"')), 10000, "alarm start");
+  const runsAt = () => lastRuns(1000).filter((x) => x.event === "run").map((x) => x.now);
+  const base = runsAt().length;
+  await waitFor(() => runsAt().length >= base + 1, 15000, "first alarm run");
+  firestoreFailing = true;
+  await waitFor(() => runsAt().length >= base + 2, 75000, "alarm run during outage");
+  firestoreFailing = false;
+  const id = await createOrder({ customerName: "קופה סגורה" });
+  await waitFor(() => runsAt().length >= base + 3, 75000, "alarm run after the failed run");
+  const times = runsAt().slice(base);
+  assert.ok(times[2] - times[1] >= 55000 && times[2] - times[1] <= 65000, `~1 min apart: ${times}`);
+  const failedRun = lastRuns(1000).filter((x) => x.event === "run")[base + 1];
+  assert.match(failedRun.ingestError || "", /503/);
+  await waitFor(() => row(id)?.status === "sent", 75000, "order sent by alarm");
+  assert.equal(telegram.delivered.filter((m) => m.text.includes("קופה סגורה")).length, 1);
 });

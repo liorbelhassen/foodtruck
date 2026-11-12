@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import { SCHEMA } from "./schema.js";
 import { queryOrdersCreatedSince } from "./firestore.js";
 import { formatOrderMessage } from "./format.js";
@@ -221,12 +222,46 @@ export async function runOnce(env, now = Date.now()) {
   return summary;
 }
 
+const TICK_MS = 60 * 1000;
+
+// The free plan's 5 cron triggers are all used by another Worker on this
+// account, so a Durable Object alarm drives the poll instead: every alarm
+// first books the next one, then runs, and never throws, so one bad run
+// cannot break the chain. Alarms are durable across deploys and restarts.
+export class Scheduler extends DurableObject {
+  async ensure() {
+    const at = await this.ctx.storage.getAlarm();
+    if (at == null || at > Date.now() + 5 * TICK_MS) {
+      await this.ctx.storage.setAlarm(Date.now() + 1000);
+      return { started: true };
+    }
+    return { started: false, nextAt: at };
+  }
+
+  async alarm() {
+    await this.ctx.storage.setAlarm(Math.floor(Date.now() / TICK_MS) * TICK_MS + TICK_MS);
+    try {
+      await runOnce(this.env);
+    } catch (err) {
+      console.error(JSON.stringify({ event: "run_failed", error: String(err?.message || err) }));
+    }
+  }
+}
+
+function scheduler(env) {
+  return env.SCHEDULER.get(env.SCHEDULER.idFromName("main"));
+}
+
 export default {
   async scheduled(controller, env, ctx) {
+    // Not used in production (no cron slot); used by tests via /__scheduled.
     ctx.waitUntil(runOnce(env));
   },
-  async fetch() {
-    // The temporary /test route was removed; the Worker is driven by its Cron Trigger.
+  async fetch(request, env) {
+    // The temporary /test route was removed. Any request only makes sure the
+    // minute alarm is scheduled (idempotent); nothing is exposed.
+    const r = await scheduler(env).ensure();
+    if (r.started) console.log(JSON.stringify({ event: "alarm_started" }));
     return new Response("Not found", { status: 404 });
   },
 };
