@@ -29,6 +29,11 @@ import {
 import { PaymentChoiceButton } from "./customer/customerAtoms.jsx";
 import { TimeWheelPicker } from "./customer/TimeWheelPicker.jsx";
 
+const PAYMENT_LINKS = {
+  bit: { url: "https://www.bitpay.co.il/app/me/4AF18BEF-2E06-426D-8A63-C99100BE8068", label: "קישור לתשלום בביט" },
+  paybox: { url: "https://links.payboxapp.com/Rp9SBFAn85b", label: "קישור לתשלום בפייבוקס" },
+};
+
 const PICKUP_TIME_MIN = "18:30";
 const PICKUP_TIME_MAX = "23:00";
 const DEFAULT_PICKUP_TIME = PICKUP_TIME_MIN;
@@ -2324,6 +2329,20 @@ export default function CustomerScreen({
                                 margin: "0 auto 8px",
                               }}
                             />
+                            <a
+                              href={PAYMENT_LINKS[requestedPayment].url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: "inline-block",
+                                marginBottom: 8,
+                                color: requestedPayment === "bit" ? "#0f766e" : "#1d4ed8",
+                                fontWeight: 900,
+                                textDecoration: "underline",
+                              }}
+                            >
+                              {PAYMENT_LINKS[requestedPayment].label}
+                            </a>
                             <div>
                               סרקו ושלמו <b>₪{orderTotal}</b> ב{paymentLabels[requestedPayment]}, ואז לחצו "שליחת הזמנה"
                             </div>
