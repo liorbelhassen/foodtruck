@@ -3,7 +3,7 @@
 # alarm polls Firestore over REST and a D1 database keeps progress + the send queue.
 #
 # Secrets (set with `wrangler secret put`, never committed):
-#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  - already set on the Worker
+#   TELEGRAM_BOT_TOKEN                   - already set on the Worker
 #   GCP_SERVICE_ACCOUNT_JSON             - read-only Firestore service account key
 name = "hanachshonia-telegram"
 main = "src/index.js"
@@ -31,6 +31,8 @@ database_id = "8b5662bd-8896-41cd-9bc6-448f6254c8c1"
 
 [vars]
 FIREBASE_PROJECT_ID = "foodtruck-app-bd"
+# Staff Telegram group (not secret); anyone added to the group gets the alerts.
+TELEGRAM_CHAT_ID = "-5593802144"
 
 [observability]
 enabled = true
