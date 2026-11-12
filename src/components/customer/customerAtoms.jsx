@@ -15,10 +15,10 @@ export function PaymentChoiceButton({ label, active, onClick, theme = "dark" }) 
       boxShadow: active ? "0 12px 24px rgba(67,56,202,0.20)" : "none",
     },
     paybox: {
-      background: active ? "#ea580c" : "#fff7ed",
-      color: active ? "white" : "#9a3412",
-      border: "1px solid #fed7aa",
-      boxShadow: active ? "0 12px 24px rgba(234,88,12,0.20)" : "none",
+      background: active ? "#0891b2" : "#ecfeff",
+      color: active ? "white" : "#155e75",
+      border: "1px solid #a5f3fc",
+      boxShadow: active ? "0 12px 24px rgba(8,145,178,0.22)" : "none",
     },
   };
 
