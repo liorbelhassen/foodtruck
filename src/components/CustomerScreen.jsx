@@ -30,8 +30,8 @@ import { PaymentChoiceButton } from "./customer/customerAtoms.jsx";
 import { TimeWheelPicker } from "./customer/TimeWheelPicker.jsx";
 
 const PAYMENT_LINKS = {
-  bit: { url: "https://www.bitpay.co.il/app/me/4AF18BEF-2E06-426D-8A63-C99100BE8068", label: "קישור לתשלום בביט" },
-  paybox: { url: "https://links.payboxapp.com/Rp9SBFAn85b", label: "קישור לתשלום בפייבוקס" },
+  bit: { url: "https://www.bitpay.co.il/app/me/4AF18BEF-2E06-426D-8A63-C99100BE8068", label: "קישור לתשלום בביט", color: "#4338ca", glow: "rgba(67,56,202,0.30)" },
+  paybox: { url: "https://links.payboxapp.com/Rp9SBFAn85b", label: "קישור לתשלום בפייבוקס", color: "#ea580c", glow: "rgba(234,88,12,0.30)" },
 };
 
 const PICKUP_TIME_MIN = "18:30";
@@ -2334,13 +2334,22 @@ export default function CustomerScreen({
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
-                                display: "inline-block",
-                                marginBottom: 8,
-                                color: requestedPayment === "bit" ? "#0f766e" : "#1d4ed8",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 8,
+                                margin: "4px auto 12px",
+                                padding: "12px 26px",
+                                borderRadius: 999,
+                                background: PAYMENT_LINKS[requestedPayment].color,
+                                color: "white",
                                 fontWeight: 900,
-                                textDecoration: "underline",
+                                fontSize: 16,
+                                textDecoration: "none",
+                                border: "2px solid white",
+                                boxShadow: `0 10px 22px ${PAYMENT_LINKS[requestedPayment].glow}`,
                               }}
                             >
+                              <span aria-hidden="true">📲</span>
                               {PAYMENT_LINKS[requestedPayment].label}
                             </a>
                             <div>
