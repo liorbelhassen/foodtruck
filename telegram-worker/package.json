@@ -1,0 +1,13 @@
+{
+  "name": "hanachshonia-telegram",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}

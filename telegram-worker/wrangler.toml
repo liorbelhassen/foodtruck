@@ -1,0 +1,36 @@
+# Cloudflare Worker that sends a Telegram message for every new order in
+# Firestore `orders`. Runs on the free Workers plan: a 1-minute Durable Object
+# alarm polls Firestore over REST and a D1 database keeps progress + the send queue.
+#
+# Secrets (set with `wrangler secret put`, never committed):
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  - already set on the Worker
+#   GCP_SERVICE_ACCOUNT_JSON             - read-only Firestore service account key
+name = "hanachshonia-telegram"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+# Keep variables that were added in the dashboard (e.g. TELEGRAM_CHAT_ID if it is a plain var).
+keep_vars = true
+
+# No Cron Trigger: the account's 5 free cron slots are used by another Worker.
+# The Scheduler Durable Object (SQLite-backed, free plan) runs every minute.
+[triggers]
+crons = []
+
+[[durable_objects.bindings]]
+name = "SCHEDULER"
+class_name = "Scheduler"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Scheduler"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hanachshonia-telegram"
+database_id = "8b5662bd-8896-41cd-9bc6-448f6254c8c1"
+
+[vars]
+FIREBASE_PROJECT_ID = "foodtruck-app-bd"
+
+[observability]
+enabled = true
