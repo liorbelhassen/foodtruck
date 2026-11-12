@@ -31,7 +31,7 @@ import { TimeWheelPicker } from "./customer/TimeWheelPicker.jsx";
 
 const PAYMENT_LINKS = {
   bit: { url: "https://www.bitpay.co.il/app/me/4AF18BEF-2E06-426D-8A63-C99100BE8068", label: "קישור לתשלום בביט", color: "#4338ca", glow: "rgba(67,56,202,0.30)" },
-  paybox: { url: "https://links.payboxapp.com/Rp9SBFAn85b", label: "קישור לתשלום בפייבוקס", color: "#ea580c", glow: "rgba(234,88,12,0.30)" },
+  paybox: { url: "https://links.payboxapp.com/Rp9SBFAn85b", label: "קישור לתשלום בפייבוקס", color: "#0891b2", glow: "rgba(8,145,178,0.30)" },
 };
 
 const PICKUP_TIME_MIN = "18:30";
