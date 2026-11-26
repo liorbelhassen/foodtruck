@@ -71,7 +71,7 @@ export default function PodtrackDebtScreen() {
   const { loading, error, data, at } = state;
 
   return (
-    <div dir="rtl" style={{ minHeight: "100vh", padding: "32px 16px", background: "white", color: THEME.text, textAlign: "right", fontFamily: "inherit" }}>
+    <div dir="rtl" lang="he" style={{ minHeight: "100vh", padding: "32px 16px", background: "white", color: THEME.text, textAlign: "right", fontFamily: "inherit" }}>
       <div style={{ maxWidth: 820, margin: "0 auto" }}>
         <h1 style={{ margin: "0 0 6px", fontSize: 26, fontWeight: 900, color: THEME.text }}>מצב פיננסי PodTrack — חייבים לליאור</h1>
         <p style={{ color: THEME.textSoft, fontSize: 14, margin: "0 0 24px" }}>הנתונים נטענים ישירות מגיליון ההוצאות בכל רענון של העמוד.</p>
