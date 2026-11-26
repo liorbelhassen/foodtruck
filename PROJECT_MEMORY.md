@@ -272,6 +272,7 @@ Summary of what it demands:
 - **Money:** integers in ₪ (shekels), no cents on the client; functions format with `.toFixed(2)`.
 - **Audio autoplay:** both customer (`notification.mp3`) and kitchen (`kaching.mp3`) implement unlock-on-first-gesture; expect `console.log`/`console.warn` noise from kitchen sound debugging.
 - **`dist/` is committed** and is what Firebase Hosting serves — rebuild (`npm run build`) before deploying hosting.
+- **Public PodTrack debt page (`#/podtrack-debt`):** `src/main.jsx` renders `components/PodtrackDebtScreen.jsx` for this hash (no login, never linked in the UI) and otherwise lazy-loads `App`, so the page never touches Firebase. It fetches the public Google Sheet `1-1DAHzfF8sz3M_HChFw8JO_UlhVs-5BsU1pj4h2nHLA`, tab `הוצאות`, via the gviz `out:json` export (no API key, cache-busted, `no-store`) on every load — read-only. The total = sum of every numeric value in column H (owed-to-Lior, updated by hand); rows with an H value are listed (A item, B details, E date, G status).
 - **Unused/legacy:** `@supabase/supabase-js` dependency (unused), localStorage "shifts" state in App.jsx (vestigial), stock `README.md`.
 
 ---
