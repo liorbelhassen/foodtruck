@@ -54,7 +54,7 @@ export default function PodtrackDebtScreen() {
 
   useEffect(() => {
     const prevTitle = document.title;
-    document.title = "PodTrack — חייבים לליאור";
+    document.title = "PodTrack — חוב פתוח לליאור";
     return () => { document.title = prevTitle; };
   }, []);
 
@@ -73,7 +73,7 @@ export default function PodtrackDebtScreen() {
   return (
     <div dir="rtl" lang="he" style={{ minHeight: "100vh", padding: "32px 16px", background: "white", color: THEME.text, textAlign: "right", fontFamily: "inherit" }}>
       <div style={{ maxWidth: 820, margin: "0 auto" }}>
-        <h1 style={{ margin: "0 0 6px", fontSize: 26, fontWeight: 900, color: THEME.text }}>מצב פיננסי PodTrack — חייבים לליאור</h1>
+        <h1 style={{ margin: "0 0 6px", fontSize: 26, fontWeight: 900, color: THEME.text }}>מצב פיננסי PodTrack — חוב פתוח לליאור</h1>
         <p style={{ color: THEME.textSoft, fontSize: 14, margin: "0 0 24px" }}>הנתונים נטענים ישירות מגיליון ההוצאות בכל רענון של העמוד.</p>
 
         <div style={{ background: CARD_BG, border: `1px solid ${THEME.border}`, borderRadius: 18, padding: "28px 24px", marginBottom: 20, textAlign: "center" }}>
